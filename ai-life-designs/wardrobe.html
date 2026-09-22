@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>衣 · 衣橱 — 时尚编辑风</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500&display=swap');
+body { font-family:'Noto Sans SC',sans-serif; background:#f7f4ee; color:#1c1a17; }
+.serif { font-family:'Noto Serif SC',serif; }
+.card { background:#fff; border:1px solid #e8e2d5; transition:all .3s ease; }
+.card:hover { transform:translateY(-4px); box-shadow:0 16px 32px -18px rgba(0,0,0,.18); }
+.cat-pill { transition:all .2s; }
+.cat-pill.active { background:#1c1a17; color:#f7f4ee; }
+.rule { border-top:1px solid #1c1a17; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- 顶部编辑栏 -->
+<header class="max-w-6xl mx-auto px-8 pt-10 pb-6 flex items-end justify-between">
+  <div>
+    <p class="text-[11px] tracking-[0.35em] text-stone-500 uppercase mb-2">AI Life · 衣橱卷</p>
+    <h1 class="serif text-5xl font-black leading-tight">本周衣橱</h1>
+  </div>
+  <div class="text-right">
+    <p class="serif text-3xl font-black">48 <span class="text-sm font-normal text-stone-500">件单品</span></p>
+    <p class="text-xs text-stone-500 mt-1">本季新增 6 · 待处理洗护 3</p>
+  </div>
+</header>
+
+<div class="rule max-w-6xl mx-auto"></div>
+
+<!-- 分类胶囊 + 天气提示行 -->
+<div class="max-w-6xl mx-auto px-8 py-6 flex flex-wrap items-center justify-between gap-4">
+  <div class="flex gap-2">
+    <button class="cat-pill active text-sm px-4 py-1.5 rounded-full border border-stone-300">全部</button>
+    <button class="cat-pill text-sm px-4 py-1.5 rounded-full border border-stone-300">上衣</button>
+    <button class="cat-pill text-sm px-4 py-1.5 rounded-full border border-stone-300">外套</button>
+    <button class="cat-pill text-sm px-4 py-1.5 rounded-full border border-stone-300">下装</button>
+    <button class="cat-pill text-sm px-4 py-1.5 rounded-full border border-stone-300">鞋履</button>
+  </div>
+  <div class="flex items-center gap-2 text-sm text-stone-600">
+    <i data-lucide="cloud-rain" class="w-4 h-4"></i>
+    <span>今日 14°C 小雨 — 建议择深色防水面料</span>
+  </div>
+</div>
+
+<!-- 主视觉：今日编辑精选 -->
+<section class="max-w-6xl mx-auto px-8 grid grid-cols-12 gap-6 mb-14">
+  <div class="col-span-12 lg:col-span-7 card p-8 flex gap-8">
+    <div class="w-5/12 aspect-[3/4] bg-stone-100 border border-stone-200 flex items-center justify-center">
+      <i data-lucide="shirt" class="w-16 h-16 text-stone-300"></i>
+    </div>
+    <div class="flex-1 flex flex-col justify-between">
+      <div>
+        <p class="text-[11px] tracking-[0.3em] text-stone-500 uppercase mb-3">编辑精选 01 · 今日搭配</p>
+        <h2 class="serif text-3xl font-bold leading-snug">藏青防风风衣<br><span class="text-stone-500 text-xl font-normal">— 配美利奴羊毛衫</span></h2>
+        <p class="text-sm text-stone-600 mt-4 leading-relaxed">雨日与晚间差旅兼顾的出行组套。风衣为春秋主力外搭，穿着 12 次，与当前气温及场合契合度极佳。</p>
+      </div>
+      <div class="flex items-center gap-4 mt-6">
+        <button class="bg-stone-900 text-white text-sm px-6 py-2.5 hover:bg-stone-700 transition">采纳此套</button>
+        <button class="text-sm text-stone-600 underline underline-offset-4">换一套</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-span-12 lg:col-span-5 flex flex-col gap-6">
+    <div class="card p-6">
+      <p class="text-[11px] tracking-[0.3em] text-stone-500 uppercase mb-3">穿着洞察</p>
+      <div class="space-y-4">
+        <div>
+          <div class="flex justify-between text-sm mb-1"><span>风衣利用率</span><span class="font-mono">78%</span></div>
+          <div class="h-px bg-stone-200"><div class="h-[3px] bg-stone-900" style="width:78%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-sm mb-1"><span>色彩偏好·藏青系</span><span class="font-mono">34%</span></div>
+          <div class="h-px bg-stone-200"><div class="h-[3px] bg-stone-900" style="width:34%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-sm mb-1"><span>久未穿着单品</span><span class="font-mono">9 件</span></div>
+          <div class="h-px bg-stone-200"><div class="h-[3px] bg-stone-900" style="width:19%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card p-6 flex-1 flex items-center justify-between">
+      <div>
+        <p class="text-[11px] tracking-[0.3em] text-stone-500 uppercase mb-1">本月衣物支出</p>
+        <p class="serif text-3xl font-black">¥ 820</p>
+        <p class="text-xs text-stone-500 mt-1">预算 ¥1,200 · 尚余 32%</p>
+      </div>
+      <button class="w-11 h-11 rounded-full border border-stone-900 flex items-center justify-center hover:bg-stone-900 hover:text-white transition">
+        <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- 单品索引列表 -->
+<section class="max-w-6xl mx-auto px-8 pb-20">
+  <div class="rule mb-6 flex items-center justify-between pt-4">
+    <h3 class="serif text-2xl font-bold">单品索引</h3>
+    <button class="flex items-center gap-2 text-sm border border-stone-900 px-4 py-1.5 hover:bg-stone-900 hover:text-white transition">
+      <i data-lucide="camera" class="w-4 h-4"></i> 拍照录入
+    </button>
+  </div>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
+    <div class="card p-4">
+      <div class="aspect-square bg-stone-100 border border-stone-200 flex items-center justify-center mb-3"><i data-lucide="shirt" class="w-9 h-9 text-stone-300"></i></div>
+      <p class="serif font-bold">藏青防风风衣</p>
+      <p class="text-xs text-stone-500 mt-0.5">¥1,280 · 穿 12 次 · 春秋</p>
+    </div>
+    <div class="card p-4">
+      <div class="aspect-square bg-stone-100 border border-stone-200 flex items-center justify-center mb-3"><i data-lucide="layers" class="w-9 h-9 text-stone-300"></i></div>
+      <p class="serif font-bold">美利奴羊毛衫</p>
+      <p class="text-xs text-stone-500 mt-0.5">¥620 · 穿 24 次 · 四季</p>
+    </div>
+    <div class="card p-4">
+      <div class="aspect-square bg-stone-100 border border-stone-200 flex items-center justify-center mb-3"><i data-lucide="footprints" class="w-9 h-9 text-stone-300"></i></div>
+      <p class="serif font-bold">切尔西皮靴</p>
+      <p class="text-xs text-stone-500 mt-0.5">¥1,580 · 穿 19 次 · 雨季</p>
+    </div>
+    <div class="card p-4 relative">
+      <div class="aspect-square bg-stone-100 border border-dashed border-stone-300 flex flex-col items-center justify-center gap-2 text-stone-400">
+        <i data-lucide="plus" class="w-7 h-7"></i><span class="text-xs">录入新单品</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>lucide.createIcons()</script>
+</body>
+</html>

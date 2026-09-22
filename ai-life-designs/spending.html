@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支 · 支出 — 暗夜仪表盘</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+body { font-family:'Noto Sans SC',sans-serif; background:#0b0e13; color:#dbe2ea; }
+.mono { font-family:'JetBrains Mono',monospace; }
+.panel { background:linear-gradient(180deg,#12161d,#0e1218); border:1px solid #1e2530; border-radius:14px; }
+.bar { background:#1a212b; border-radius:4px; overflow:hidden; }
+.bar > div { height:100%; border-radius:4px; }
+.tbl-row { border-bottom:1px solid #161c24; transition:background .15s; }
+.tbl-row:hover { background:#141a22; }
+.tag { font-size:10px; padding:2px 7px; border-radius:4px; font-weight:500; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<header class="max-w-7xl mx-auto px-8 py-7 flex items-center justify-between">
+  <div>
+    <p class="text-[10px] tracking-[0.3em] text-neutral-500 uppercase mb-1">AI LIFE · FINANCE</p>
+    <h1 class="text-xl font-bold">支出仪表盘 · 2025 年 3 月</h1>
+  </div>
+  <div class="flex items-center gap-3">
+    <button class="text-xs border border-neutral-700 rounded-lg px-4 py-2 hover:border-neutral-500 transition flex items-center gap-2">
+      <i data-lucide="upload" class="w-3.5 h-3.5"></i> 导入账单
+    </button>
+    <button class="text-xs bg-cyan-600 text-white rounded-lg px-4 py-2 hover:bg-cyan-500 transition flex items-center gap-2">
+      <i data-lucide="plus" class="w-3.5 h-3.5"></i> 记一笔
+    </button>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-8 pb-14 space-y-5">
+
+  <!-- KPI 行 -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="panel p-5">
+      <p class="text-[11px] text-neutral-500 mb-2">本月总支出</p>
+      <p class="mono text-2xl font-bold">¥3,220.78</p>
+      <p class="text-xs text-emerald-400 mt-1.5">环比 ↓ 8.3%</p>
+    </div>
+    <div class="panel p-5">
+      <p class="text-[11px] text-neutral-500 mb-2">总预算执行</p>
+      <p class="mono text-2xl font-bold">58.5<span class="text-sm text-neutral-500">%</span></p>
+      <div class="bar mt-2 h-1.5"><div class="bg-cyan-500" style="width:58.5%"></div></div>
+    </div>
+    <div class="panel p-5">
+      <p class="text-[11px] text-neutral-500 mb-2">本周笔数 / 均额</p>
+      <p class="mono text-2xl font-bold">42 <span class="text-sm text-neutral-500">笔</span></p>
+      <p class="text-xs text-neutral-500 mt-1.5">平均 <span class="mono">¥76.7</span>/笔</p>
+    </div>
+    <div class="panel p-5">
+      <p class="text-[11px] text-neutral-500 mb-2">异常预警</p>
+      <p class="text-2xl font-bold text-amber-400">2 <span class="text-sm text-neutral-500">项</span></p>
+      <p class="text-xs text-neutral-500 mt-1.5">出行类超增速</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-5">
+
+    <!-- 占比与趋势 -->
+    <div class="col-span-12 lg:col-span-5 panel p-6">
+      <h2 class="text-sm font-medium text-neutral-300 mb-5">方式分类占比</h2>
+      <div class="space-y-4">
+        <div>
+          <div class="flex justify-between text-xs mb-1.5"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-sm bg-emerald-400"></span>食</span><span class="mono">¥1,240 · 38.5%</span></div>
+          <div class="bar h-2"><div class="bg-emerald-400" style="width:38.5%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1.5"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-sm bg-amber-400"></span>住</span><span class="mono">¥780 · 24.2%</span></div>
+          <div class="bar h-2"><div class="bg-amber-400" style="width:24.2%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1.5"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-sm bg-blue-400"></span>行</span><span class="mono">¥618 · 19.2%</span></div>
+          <div class="bar h-2"><div class="bg-blue-400" style="width:19.2%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1.5"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-sm bg-violet-400"></span>衣</span><span class="mono">¥582 · 18.1%</span></div>
+          <div class="bar h-2"><div class="bg-violet-400" style="width:18.1%"></div></div>
+        </div>
+      </div>
+      <div class="mt-6 pt-5 border-t border-neutral-800 flex items-center gap-3 text-xs text-neutral-400">
+        <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400 shrink-0"></i>
+        <p>「住」中净水器滤芯购买建议延后 1 周至下月预算周期，可省 ¥89。</p>
+      </div>
+    </div>
+
+    <!-- 流水明细 -->
+    <div class="col-span-12 lg:col-span-7 panel p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-medium text-neutral-300">全部流水</h2>
+        <div class="flex gap-1.5">
+          <span class="tag bg-neutral-800 text-neutral-300">全部</span>
+          <span class="tag bg-emerald-950/60 text-emerald-400 border border-emerald-900">食</span>
+          <span class="tag bg-neutral-800/50 text-neutral-500">衣</span>
+          <span class="tag bg-neutral-800/50 text-neutral-500">住</span>
+          <span class="tag bg-neutral-800/50 text-neutral-500">行</span>
+        </div>
+      </div>
+      <div class="text-sm">
+        <div class="tbl-row grid grid-cols-12 py-3 items-center">
+          <span class="col-span-1"><span class="tag bg-emerald-950/60 text-emerald-400">食</span></span>
+          <span class="col-span-4">盒马鲜生 · 周末食材</span>
+          <span class="col-span-2 text-neutral-500 mono text-xs">09:14</span>
+          <span class="col-span-3 text-neutral-500 text-xs">微信 · 建设银行储蓄卡</span>
+          <span class="col-span-2 text-right mono font-semibold">-¥186.50</span>
+        </div>
+        <div class="tbl-row grid grid-cols-12 py-3 items-center">
+          <span class="col-span-1"><span class="tag bg-blue-950/60 text-blue-400">行</span></span>
+          <span class="col-span-4">MU5331 上海→深圳机票</span>
+          <span class="col-span-2 text-neutral-500 mono text-xs">昨 21:32</span>
+          <span class="col-span-3 text-neutral-500 text-xs">航司直购 · 支付宝</span>
+          <span class="col-span-2 text-right mono font-semibold">-¥458.00</span>
+        </div>
+        <div class="tbl-row grid grid-cols-12 py-3 items-center">
+          <span class="col-span-1"><span class="tag bg-violet-950/60 text-violet-400">衣</span></span>
+          <span class="col-span-4">干洗店 · 风衣护理</span>
+          <span class="col-span-2 text-neutral-500 mono text-xs">昨 14:05</span>
+          <span class="col-span-3 text-neutral-500 text-xs">微信</span>
+          <span class="col-span-2 text-right mono font-semibold">-¥68.00</span>
+        </div>
+        <div class="tbl-row grid grid-cols-12 py-3 items-center">
+          <span class="col-span-1"><span class="tag bg-amber-950/60 text-amber-400">住</span></span>
+          <span class="col-span-4">电费缴纳 · 3 月</span>
+          <span class="col-span-2 text-neutral-500 mono text-xs">03-18</span>
+          <span class="col-span-3 text-neutral-500 text-xs">自动代扣</span>
+          <span class="col-span-2 text-right mono font-semibold">-¥214.30</span>
+        </div>
+        <div class="tbl-row grid grid-cols-12 py-3 items-center">
+          <span class="col-span-1"><span class="tag bg-emerald-950/60 text-emerald-400">食</span></span>
+          <span class="col-span-4">减脂沙拉 · 工作日午餐</span>
+          <span class="col-span-2 text-neutral-500 mono text-xs">03-18</span>
+          <span class="col-span-3 text-neutral-500 text-xs">美团外卖</span>
+          <span class="col-span-2 text-right mono font-semibold">-¥32.80</span>
+        </div>
+      </div>
+      <button class="w-full text-center text-xs text-neutral-500 hover:text-neutral-300 mt-4 py-2 transition">加载更多 · 本月共 86 笔</button>
+    </div>
+  </div>
+</main>
+
+<script>lucide.createIcons()</script>
+</body>
+</html>
