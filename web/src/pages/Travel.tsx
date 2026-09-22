@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import type { Trip, TripStatus } from '../types';
-import { Empty, Field, Modal, PageHead, Progress, SpendCard } from '../components/ui';
+import { Empty, Field, Modal, Progress, SpendCard } from '../components/ui';
 
 export function TravelPage() {
   const store = useStore();
@@ -11,16 +11,16 @@ export function TravelPage() {
 
   return (
     <>
-      <PageHead
-        title="出行"
-        desc="行程、票务和出发前要带的东西。"
-        extra={
-          <div className="row-actions">
-            <button type="button" className="btn" data-testid="new-trip" onClick={() => setCreating(true)}>新建行程</button>
-            <button type="button" className="btn-ghost" onClick={() => setCreating(true)}>导入订单</button>
-          </div>
-        }
-      />
+      <header className="page-head">
+        <div>
+          <p className="kicker">AI Life · Travel</p>
+          <h1 className="display">行<br />·<br />出行</h1>
+        </div>
+        <div className="row-actions">
+          <button type="button" className="btn" data-testid="new-trip" onClick={() => setCreating(true)}>新建行程</button>
+          <button type="button" className="btn-ghost" onClick={() => setCreating(true)}>导入订单</button>
+        </div>
+      </header>
       {store.trips.length === 0 || !trip ? (
         <div className="stack">
           <div className="card">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { ROOMS, SCENES, type Room, type SceneName } from '../types';
-import { Empty, PageHead, SpendCard } from '../components/ui';
+import { Empty, SpendCard } from '../components/ui';
 
 export function HomePage() {
   const store = useStore();
@@ -13,7 +13,13 @@ export function HomePage() {
 
   return (
     <>
-      <PageHead title="家居" desc="设备、场景和住家开销。" />
+      <header className="page-head">
+        <div>
+          <h1 className="display" style={{ fontSize: 28 }}>家居中控</h1>
+          <p className="mono muted">HOME ASSISTANT · {online} DEVICES ONLINE</p>
+        </div>
+        <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : '中枢在线'}</span>
+      </header>
       {store.devices.length === 0 ? (
         <div className="stack">
           <div className="card">

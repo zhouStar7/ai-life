@@ -2,8 +2,6 @@ import { useNavigate } from 'react-router-dom';
 import { monthExpenses, share, sumAmount, todayLabel, yuan } from '../format';
 import { useStore } from '../store';
 import { SPEND_TAGS } from '../types';
-import { PageHead } from '../components/ui';
-
 export function OverviewPage() {
   const store = useStore();
   const navigate = useNavigate();
@@ -51,13 +49,41 @@ export function OverviewPage() {
 
   return (
     <>
-      <PageHead title={`今天 · ${todayLabel()}`} desc="衣食住行都在这一页上。" />
-      <article className="card suggestion" style={{ marginBottom: 14 }}>
-        <h2>跨域安排</h2>
-        <p className="reason">上海降温有雨，晚上要去技术交流会。穿米色风衣出门，午餐换成高蛋白，出发前切到离家，北京行李加上防风层，差旅 ¥2,400 记到「行」。</p>
-        <button type="button" className="btn" data-testid="adopt-cross" disabled={store.adoptedTips.includes('cross')} onClick={store.executeCrossPlan}>
-          {store.adoptedTips.includes('cross') ? '已采纳' : '一键采纳'}
-        </button>
+      <article className="card hero">
+        <div className="page-head">
+          <div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <span className="seal">跨域协同 · 行动备忘</span>
+              <span className="muted">{todayLabel()} · 沪上细雨</span>
+            </div>
+            <h1 className="display" style={{ fontSize: 28 }}>今日日用综览：微雨通勤轻装、午宜清淡，晚间有北上燕京之行</h1>
+          </div>
+          <button type="button" className="btn" data-testid="adopt-cross" disabled={store.adoptedTips.includes('cross')} onClick={store.executeCrossPlan}>
+            {store.adoptedTips.includes('cross') ? '已应允' : '一键应允全部谋划'}
+          </button>
+        </div>
+        <div className="matrix">
+          <div className="inner">
+            <strong style={{ color: 'var(--tag-cloth)' }}>衣 · 顺应天候</strong>
+            <p>{store.suggestion.title}</p>
+            <p className="muted">{store.suggestion.reason}</p>
+          </div>
+          <div className="inner">
+            <strong style={{ color: 'var(--tag-food)' }}>食 · 调摄节度</strong>
+            <p>{kcal} / {store.targets.kcal || '—'} kcal</p>
+            <p className="muted">{gap > 0 ? `蛋白质还差 ${gap} g` : '蛋白质已达标'}</p>
+          </div>
+          <div className="inner">
+            <strong style={{ color: 'var(--tag-home)' }}>住 · 庭轩安适</strong>
+            <p>{online} 台在线</p>
+            <p className="muted">{abnormal > 0 ? `${abnormal} 项异常` : '安居无虞'}</p>
+          </div>
+          <div className="inner">
+            <strong style={{ color: 'var(--tag-travel)' }}>行 · 舟车行程</strong>
+            <p>{upcoming?.title ?? '暂无行程'}</p>
+            <p className="muted">{upcoming?.dateLabel ?? '可以新建一趟'}</p>
+          </div>
+        </div>
       </article>
       <section className="grid-4">
         <button type="button" className="card stat link-card" onClick={() => navigate('/wardrobe')}>

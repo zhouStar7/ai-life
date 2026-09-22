@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { colorHex, itemNames } from '../format';
 import { useStore } from '../store';
 import { CATEGORIES, type WardrobeCategory, type WardrobeItem } from '../types';
-import { Empty, Field, Modal, PageHead, SpendCard } from '../components/ui';
+import { Empty, Field, Modal, SpendCard } from '../components/ui';
 
 type Draft = Omit<WardrobeItem, 'id' | 'wears' | 'createdAt'>;
 
@@ -22,11 +22,16 @@ export function WardrobePage() {
 
   return (
     <>
-      <PageHead
-        title="衣橱"
-        desc="单品、穿搭和这个月的买衣花销。"
-        extra={<button type="button" className="btn" data-testid="add-item" onClick={() => setEditor('new')}>添加单品</button>}
-      />
+      <header className="page-head">
+        <div>
+          <p className="kicker">AI Life · 衣橱卷</p>
+          <h1 className="display">本周衣橱</h1>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p className="display" style={{ fontSize: 36 }}>{store.items.length} <span style={{ fontSize: 14, fontWeight: 400 }}>件单品</span></p>
+          <button type="button" className="btn" data-testid="add-item" onClick={() => setEditor('new')}>拍照录入</button>
+        </div>
+      </header>
       <div className="layout-2">
         <section>
           <div className="pills">

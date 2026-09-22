@@ -4,7 +4,7 @@ import { monthExpenses, percentChange, PREV_MONTH_SPEND, share, sumAmount, yuan 
 import { PAST_TREND, TAG_COLOR } from '../seed';
 import { useStore } from '../store';
 import { SPEND_TAGS, type SpendTag } from '../types';
-import { Empty, Field, Modal, PageHead, Progress } from '../components/ui';
+import { Empty, Field, Modal, Progress } from '../components/ui';
 
 export function SpendingPage() {
   const store = useStore();
@@ -37,16 +37,16 @@ export function SpendingPage() {
 
   return (
     <>
-      <PageHead
-        title="支出统计"
-        desc="按衣食住行看这个月花在哪。"
-        extra={
-          <div className="row-actions">
-            <button type="button" className="btn" data-testid="add-expense" onClick={() => setAdding(true)}>记一笔</button>
-            <button type="button" className="btn-ghost" onClick={() => setAdding(true)}>导入账单</button>
-          </div>
-        }
-      />
+      <header className="page-head">
+        <div>
+          <p className="kicker">AI Life · Finance</p>
+          <h1 className="display" style={{ fontSize: 28 }}>支出仪表盘 · 2026 年 9 月</h1>
+        </div>
+        <div className="row-actions">
+          <button type="button" className="btn-ghost" onClick={() => setAdding(true)}>导入账单</button>
+          <button type="button" className="btn" data-testid="add-expense" onClick={() => setAdding(true)}>记一笔</button>
+        </div>
+      </header>
       <section className="grid-4">
         <article className="card kpi"><span>本月总支出</span><strong>{yuan(total)}</strong></article>
         <article className="card kpi">

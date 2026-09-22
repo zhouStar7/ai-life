@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { MEAL_SLOTS, type Meal, type MealSlot, type NutritionTarget } from '../types';
-import { Empty, Field, Modal, PageHead, Progress, SpendCard } from '../components/ui';
+import { Empty, Field, Modal, Progress, SpendCard } from '../components/ui';
 import { WEEK_HISTORY } from '../seed';
 
 const EMPTY: Omit<Meal, 'id'> = { slot: '午餐', name: '', time: '12:30', kcal: 0, protein: 0, carb: 0, fat: 0 };
@@ -30,11 +30,13 @@ export function DietPage() {
 
   return (
     <>
-      <PageHead
-        title="饮食"
-        desc="今天吃了什么，离目标还差多少。"
-        extra={<button type="button" className="btn" data-testid="add-meal" onClick={() => setEditor('new')}>添加餐次</button>}
-      />
+      <header className="page-head">
+        <div>
+          <p className="kicker">AI Life · 食</p>
+          <h1 className="display" style={{ fontSize: 36 }}>今天的餐桌</h1>
+        </div>
+        <button type="button" className="btn" data-testid="add-meal" onClick={() => setEditor('new')}>拍餐录入</button>
+      </header>
       <div className="layout-2">
         <section className="stack">
           <article className="card">
@@ -80,6 +82,16 @@ export function DietPage() {
               <Empty title="还没设营养目标" desc="先定一个每日热量，进度才有对照。" action={<button type="button" className="btn" onClick={() => setTargetOpen(true)}>设置目标</button>} />
             ) : (
               <>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '8px 0 12px' }}>
+                  <div className="ring-wrap" aria-hidden="true">
+                    <svg viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="#eee2cf" strokeWidth="10" />
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="#d97706" strokeWidth="10" strokeLinecap="round" strokeDasharray={264} strokeDashoffset={264 * (1 - Math.min(1, totals.kcal / store.targets.kcal))} />
+                    </svg>
+                    <div className="ring-label"><strong>{totals.kcal}</strong><span className="muted">/ {store.targets.kcal}</span></div>
+                  </div>
+                  <p className="muted">今日热量进度</p>
+                </div>
                 <Macro label="热量" value={totals.kcal} max={store.targets.kcal} unit="kcal" />
                 <Macro label="蛋白质" value={totals.protein} max={store.targets.protein} unit="g" />
                 <Macro label="碳水" value={totals.carb} max={store.targets.carb} unit="g" />

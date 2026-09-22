@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { SPEND_TAGS, type Budgets } from '../types';
-import { Field, PageHead } from '../components/ui';
+import { Field } from '../components/ui';
 import { yuan } from '../format';
 
 export function SettingsPage() {
@@ -15,7 +15,13 @@ export function SettingsPage() {
 
   return (
     <div className="settings">
-      <PageHead title="设置" desc="预算和数据来源先留在这里。账号和主题本期只做占位。" />
+      <header className="page-head">
+        <div>
+          <p className="kicker">AI Life · 设置</p>
+          <h1 className="display" style={{ fontSize: 32 }}>阁中偏好</h1>
+          <p className="muted">预算和数据来源留在这里。意境风格在顶栏切换。</p>
+        </div>
+      </header>
       <article className="card">
         <h2>账号</h2>
         <p style={{ marginTop: 8 }}>星宇 · 当前为本地演示，没有登录。</p>
