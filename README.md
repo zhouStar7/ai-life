@@ -36,6 +36,18 @@ designs/
 - [视觉与导航规范](docs/design-system.md)
 - [支出分类口径](docs/spending-taxonomy.md)
 
+## 运行演示
+
+演示在 `web/`，数据只存在当前浏览器会话里。
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+打开 http://localhost:5173 。顶栏搜索支持 ⌘K / Ctrl+K。
+
 ## 优先级
 
 - **P0**：衣橱、饮食、家居、出行、支出统计
