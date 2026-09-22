@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行 · 出行 — 瑞士排版风</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+body { font-family:'Inter','Noto Sans SC',sans-serif; background:#fff; color:#0a0a0a; }
+.grid-line { border-left:1px solid #e5e5e5; }
+.ticket-perf { background-image: linear-gradient(to right, #0a0a0a 40%, transparent 40%); background-size: 12px 2px; background-repeat: repeat-x; height: 2px; }
+.timeline-node { position:relative; }
+.timeline-node::before { content:''; position:absolute; left:-25px; top:6px; width:9px; height:9px; border:2px solid #0a0a0a; background:#fff; border-radius:9999px; }
+.timeline-node.done::before { background:#0a0a0a; }
+.timeline-node.active::before { background:#2563eb; border-color:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.15); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="grid grid-cols-12 min-h-screen">
+
+  <!-- 左侧固定栏 -->
+  <aside class="col-span-12 lg:col-span-3 border-r border-neutral-200 p-10 flex flex-col justify-between">
+    <div>
+      <p class="text-[10px] tracking-[0.4em] uppercase text-neutral-400 mb-6">AI LIFE<br>TRAVEL MODULE</p>
+      <h1 class="text-5xl font-black tracking-tight leading-none">行<br>·<br>出行</h1>
+      <p class="text-sm text-neutral-500 mt-6 leading-relaxed">所有票务、行程节点与出行开销，统一汇入时间轴。</p>
+    </div>
+    <div class="space-y-2 text-sm mt-10">
+      <div class="flex justify-between border-b border-neutral-200 pb-2"><span class="text-neutral-500">进行中</span><span class="font-bold">1</span></div>
+      <div class="flex justify-between border-b border-neutral-200 pb-2"><span class="text-neutral-500">未来 30 日</span><span class="font-bold">3</span></div>
+      <div class="flex justify-between"><span class="text-neutral-500">本月出行支出</span><span class="font-mono font-bold">¥618</span></div>
+    </div>
+  </aside>
+
+  <!-- 主内容 -->
+  <div class="col-span-12 lg:col-span-9 p-10">
+
+    <!-- 机票票据卡 -->
+    <section class="mb-12">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xs font-bold tracking-[0.3em] uppercase">UPCOMING · 本周五</h2>
+        <span class="text-xs font-semibold px-3 py-1 bg-blue-600 text-white rounded-none">已出票</span>
+      </div>
+      <div class="border-2 border-neutral-900 grid grid-cols-12">
+        <div class="col-span-9 p-7">
+          <div class="flex items-center gap-6">
+            <div><p class="text-4xl font-black tracking-tight">SHA</p><p class="text-xs text-neutral-500 mt-1">上海虹桥 · 18:35</p></div>
+            <div class="flex-1 relative">
+              <div class="ticket-perf"></div>
+              <i data-lucide="plane" class="w-5 h-5 absolute left-1/2 -translate-x-1/2 -top-2.5 bg-white text-blue-600"></i>
+            </div>
+            <div class="text-right"><p class="text-4xl font-black tracking-tight">SZX</p><p class="text-xs text-neutral-500 mt-1">深圳宝安 · 21:10</p></div>
+          </div>
+        </div>
+        <div class="col-span-3 border-l-2 border-dashed border-neutral-900 p-7 bg-neutral-50 flex flex-col justify-between">
+          <div><p class="text-[10px] tracking-widest text-neutral-400 uppercase">Flight</p><p class="font-mono font-bold">MU5331</p></div>
+          <div><p class="text-[10px] tracking-widest text-neutral-400 uppercase">Seat</p><p class="font-mono font-bold">32A</p></div>
+          <div><p class="text-[10px] tracking-widest text-neutral-400 uppercase">票价</p><p class="font-mono font-bold text-blue-600">¥458</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 时间轴 + 智能联动 -->
+    <div class="grid grid-cols-12 gap-8">
+      <section class="col-span-12 lg:col-span-7">
+        <h2 class="text-xs font-bold tracking-[0.3em] uppercase mb-5">行程时间轴</h2>
+        <div class="space-y-6 border-l border-neutral-300 ml-1.5">
+          <div class="timeline-node done pl-2">
+            <p class="text-sm font-bold">杭州东 → 上海虹桥（高铁）</p>
+            <p class="text-xs text-neutral-500 mt-1">周五 16:20 · ¥73 · 已完成出票</p>
+          </div>
+          <div class="timeline-node active pl-2">
+            <p class="text-sm font-bold text-blue-600">上海 → 深圳（飞行）· 进行中筹备</p>
+            <p class="text-xs text-neutral-500 mt-1">周五 18:35 · 托运行李额已确认 20kg</p>
+          </div>
+          <div class="timeline-node pl-2">
+            <p class="text-sm font-bold">酒店入住 · 深圳湾科技园全季</p>
+            <p class="text-xs text-neutral-500 mt-1">周五 22:30 后 · 预估 ¥389/晚</p>
+          </div>
+          <div class="timeline-node pl-2">
+            <p class="text-sm font-bold">周一客户会议</p>
+            <p class="text-xs text-neutral-500 mt-1">南山区 · 已同步日历</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="col-span-12 lg:col-span-5 grid-line pl-8">
+        <h2 class="text-xs font-bold tracking-[0.3em] uppercase mb-5">跨模块联动</h2>
+        <div class="space-y-4">
+          <div class="border border-neutral-900 p-4">
+            <div class="flex items-center gap-2 mb-1.5"><i data-lucide="shirt" class="w-4 h-4"></i><p class="text-sm font-bold">衣 · 出行穿搭包</p></div>
+            <p class="text-xs text-neutral-500">深圳 24°C 晴 — 已备 2 套商务休闲装 + 1 件薄外套</p>
+          </div>
+          <div class="border border-neutral-200 p-4">
+            <div class="flex items-center gap-2 mb-1.5"><i data-lucide="home" class="w-4 h-4"></i><p class="text-sm font-bold">住 · 离家模式</p></div>
+            <p class="text-xs text-neutral-500">离家当日自动撤防场景 · 关闭空调/灯</p>
+          </div>
+          <div class="border border-neutral-200 p-4">
+            <div class="flex items-center gap-2 mb-1.5"><i data-lucide="wallet" class="w-4 h-4"></i><p class="text-sm font-bold">支 · 行程预算</p></div>
+            <p class="text-xs text-neutral-500">预估总支出 ¥1,920 — 票务已占用 ¥531</p>
+          </div>
+          <button class="w-full bg-neutral-950 text-white text-sm font-bold py-3 hover:bg-neutral-800 transition flex items-center justify-center gap-2">
+            <i data-lucide="sparkles" class="w-4 h-4"></i> 生成完整出行方案
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<script>lucide.createIcons()</script>
+</body>
+</html>

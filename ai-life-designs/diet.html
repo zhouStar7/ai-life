@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>食 · 饮食 — 暖阳有机风</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+body { font-family:'Noto Sans SC',sans-serif; background:#faf3e7; color:#3d3325; }
+.well { background:#fff; border-radius:1.5rem; box-shadow:0 2px 12px -6px rgba(120,90,40,.12); }
+.ring-bg { stroke:#eee2cf; }
+.macro-dot { width:10px; height:10px; border-radius:9999px; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<header class="max-w-5xl mx-auto px-8 pt-10 pb-8 flex items-center justify-between">
+  <div>
+    <p class="text-xs tracking-widest text-stone-500 mb-1 def">AI LIFE · 食</p>
+    <h1 class="text-3xl font-bold">今天的餐桌 🍲</h1>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="bg-white rounded-full px-4 py-2 text-sm shadow-sm">连记第 21 天 🔥</span>
+    <button class="bg-amber-700 text-white rounded-full px-5 py-2.5 text-sm font-medium shadow hover:bg-amber-800 transition flex items-center gap-2">
+      <i data-lucide="camera" class="w-4 h-4"></i> 拍餐录入
+    </button>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-8 pb-16 grid grid-cols-12 gap-6">
+
+  <!-- 热量圆环 + 三大营养素 -->
+  <div class="col-span-12 lg:col-span-5 well p-7">
+    <p class="text-sm font-medium text-stone-500 mb-4">今日热量进度</p>
+    <div class="flex items-center gap-6">
+      <div class="relative w-32 h-32">
+        <svg viewBox="0 0 100 100" class="w-full h-full -rotate-90">
+          <circle cx="50" cy="50" r="42" fill="none" class="ring-bg" stroke-width="10"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#d97706" stroke-width="10" stroke-linecap="round"
+                  stroke-dasharray="264" stroke-dashoffset="92"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="text-2xl font-bold">1,450</span>
+          <span class="text-[10px] text-stone-500">/ 2,100 kcal</span>
+        </div>
+      </div>
+      <div class="flex-1 space-y-3 text-sm">
+        <div class="flex items-center justify-between"><span class="flex items-center gap-2"><span class="macro-dot bg-amber-500"></span>碳水</span><span class="font-mono">140g</span></div>
+        <div class="flex items-center justify-between"><span class="flex items-center gap-2"><span class="macro-dot bg-emerald-600"></span>蛋白质</span><span class="font-mono">68g</span></div>
+        <div class="flex items-center justify-between"><span class="flex items-center gap-2"><span class="macro-dot bg-rose-500"></span>脂肪</span><span class="font-mono">45g</span></div>
+      </div>
+    </div>
+    <div class="mt-5 bg-amber-50 rounded-xl p-3.5 text-sm text-amber-900 flex gap-2">
+      <i data-lucide="lightbulb" class="w-4 h-4 mt-0.5 shrink-0"></i>
+      <span>晚间出差乘机，建议晚餐选择高蛋白清淡餐，剩余额度 650 kcal。</span>
+    </div>
+  </div>
+
+  <!-- 三餐时间线 -->
+  <div class="col-span-12 lg:col-span-7 well p-7">
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm font-medium text-stone-500">今日三餐</p>
+      <button class="text-sm text-amber-800 font-medium flex items-center gap-1"><i data-lucide="plus" class="w-4 h-4"></i>加餐</button>
+    </div>
+    <div class="space-y-3">
+      <div class="flex items-center gap-4 bg-amber-50/60 rounded-2xl p-4">
+        <div class="w-12 h-12 rounded-full bg-amber-200 flex items-center justify-center shrink-0"><i data-lucide="sun" class="w-5 h-5 text-amber-700"></i></div>
+        <div class="flex-1">
+          <p class="font-medium">早餐 · 燕麦碗 + 水煮蛋</p>
+          <p class="text-xs text-stone-500 mt-0.5">08:10 · 蛋白质 22g</p>
+        </div>
+        <span class="font-mono text-sm">380 kcal</span>
+      </div>
+      <div class="flex items-center gap-4 bg-emerald-50 rounded-2xl p-4 border border-emerald-200">
+        <div class="w-12 h-12 rounded-full bg-emerald-200 flex items-center justify-center shrink-0"><i data-lucide="salad" class="w-5 h-5 text-emerald-700"></i></div>
+        <div class="flex-1">
+          <p class="font-medium">午餐 · 鸡胸藜麦沙拉 <span class="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-1">食谱复用</span></p>
+          <p class="text-xs text-stone-500 mt-0.5">12:20 · 蛋白质 38g</p>
+        </div>
+        <span class="font-mono text-sm">520 kcal</span>
+      </div>
+      <div class="flex items-center gap-4 rounded-2xl p-4 border-2 border-dashed border-stone-300 text-stone-400">
+        <div class="w-12 h-12 rounded-full bg-stone-200 flex items-center justify-center shrink-0"><i data-lucide="moon" class="w-5 h-5"></i></div>
+        <div class="flex-1"><p class="font-medium">晚餐 · 待安排</p><p class="text-xs mt-0.5">管家建议：低脂高蛋白</p></div>
+        <button class="text-xs bg-stone-800 text-white px-3 py-1.5 rounded-full">采纳建议</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 一周趋势 -->
+  <div class="col-span-12 lg:col-span-5 well p-6">
+    <p class="text-sm font-medium text-stone-500 mb-3">本周热量趋势</p>
+    <div class="flex items-end gap-2 h-24">
+      <div class="flex-1 bg-amber-200 rounded-t-lg" style="height:55%"></div>
+      <div class="flex-1 bg-amber-300 rounded-t-lg" style="height:70%"></div>
+      <div class="flex-1 bg-amber-200 rounded-t-lg" style="height:48%"></div>
+      <div class="flex-1 bg-amber-300 rounded-t-lg" style="height:62%"></div>
+      <div class="flex-1 bg-amber-400 rounded-t-lg" style="height:80%"></div>
+      <div class="flex-1 bg-amber-500 rounded-t-lg" style="height:92%"></div>
+      <div class="flex-1 bg-amber-700 rounded-t-lg" style="height:66%"></div>
+    </div>
+    <div class="flex justify-between text-[10px] text-stone-400 mt-2"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+  </div>
+
+  <!-- 食谱库 + 本月食支出 -->
+  <div class="col-span-12 lg:col-span-4 well p-6">
+    <p class="text-sm font-medium text-stone-500 mb-3">我的食谱库</p>
+    <div class="space-y-2.5">
+      <div class="flex items-center gap-3 bg-stone-50 rounded-xl p-3"><i data-lucide="book-open" class="w-4 h-4 text-emerald-600"></i><span class="text-sm flex-1">鸡胸藜麦沙拉</span><span class="text-[10px] text-stone-400">减脂</span></div>
+      <div class="flex items-center gap-3 bg-stone-50 rounded-xl p-3"><i data-lucide="soup" class="w-4 h-4 text-amber-600"></i><span class="text-sm flex-1">番茄牛腩煲</span><span class="text-[10px] text-stone-400">周末</span></div>
+      <div class="flex items-center gap-3 bg-stone-50 rounded-xl p-3"><i data-lucide="egg" class="w-4 h-4 text-rose-500"></i><span class="text-sm flex-1">15 分钟快手早餐</span><span class="text-[10px] text-stone-400">快手</span></div>
+    </div>
+  </div>
+
+  <div class="col-span-12 lg:col-span-3 well p-6 flex flex-col justify-between bg-gradient-to-br from-amber-700 to-amber-900 text-amber-50">
+    <div>
+      <p class="text-xs text-amber-200 mb-1">本月饮食支出</p>
+      <p class="text-3xl font-bold">¥ 1,840</p>
+      <p class="text-xs text-amber-200 mt-1">环比 ↓12% · 外卖占比 31%</p>
+    </div>
+    <button class="mt-4 bg-white/15 hover:bg-white/25 transition rounded-full py-2 text-sm font-medium">查看明细</button>
+  </div>
+</main>
+
+<script>lucide.createIcons()</script>
+</body>
+</html>

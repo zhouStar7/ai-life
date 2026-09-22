@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full" data-theme="chinese-ink">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Life OS - 智能生活工作台 (中式美学与现代极简)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+    /* ============================================================
+       THEME SYSTEM SPECIFICATIONS
+       1. chinese-ink: 宣纸水墨 · 宋式风骨 (Chinese Minimalist Ink - Light)
+       2. chinese-zen: 玄墨松青 · 现代禅意 (Zen Dark Pine - Dark)
+       3. mono-minimal: 纯粹极简黑白 (Modern Monolith - Ultra Clean)
+       4. slate-teal: 科技深色极客 (Slate Teal)
+       5. warm-nordic: 北欧原木暖白 (Nordic Warm)
+    ============================================================ */
+
+    /* 🌟 主打 1：宣纸水墨 · 宋式极简 (Chinese Ink - 浅色中式) */
+    :root[data-theme="chinese-ink"] {
+      --font-main: 'Noto Serif SC', 'Noto Sans SC', serif;
+      --font-heading: 'Noto Serif SC', serif;
+      --bg-page: #f5f2e9;        /* 宣纸古法天然米白 */
+      --bg-sidebar: #ece6d8;     /* 浅素绢/淡米卡其 */
+      --bg-header: rgba(236, 230, 216, 0.88);
+      --bg-card: #fcfbf8;        /* 洁净熟宣白 */
+      --bg-card-hover: #ffffff;
+      --bg-inner: #f2ece0;       /* 灰泥微深衬底 */
+      --bg-input: #ffffff;
+      --text-main: #231f1d;      /* 焦墨色 */
+      --text-muted: #7e746a;     /* 徽墨干茶灰 */
+      --text-sub: #4a433d;       /* 浓墨淡染 */
+      --border-subtle: rgba(120, 100, 80, 0.14);
+      --border-focus: #b24131;    /* 故宫朱砂红 */
+      --primary: #b24131;        /* 经典朱砂赤色 (Seal Red) */
+      --primary-hover: #9c3324;
+      --primary-glow: rgba(178, 65, 49, 0.2);
+      --primary-text: #b24131;
+      --primary-badge-bg: rgba(178, 65, 49, 0.1);
+      --tag-cloth: #7c4b79;      /* 暮紫 */
+      --tag-food: #3f6844;       /* 竹青/松柏绿 */
+      --tag-home: #a86c2e;       /* 琥珀褐 */
+      --tag-travel: #32647c;     /* 霁蓝/青花 */
+      --tag-spend: #b24131;      /* 朱砂 */
+      --radius-box: 0.5rem;      /* 中式典雅硬朗微圆角 */
+      --card-blur: 8px;
+    }
+
+    /* 🌟 主打 2：玄墨松青 · 现代禅意 (Chinese Zen Dark - 深色中式) */
+    :root[data-theme="chinese-zen"] {
+      --font-main: 'Noto Serif SC', 'Noto Sans SC', serif;
+      --font-heading: 'Noto Serif SC', serif;
+      --bg-page: #0f1311;        /* 墨黑玄色微带松墨意境 */
+      --bg-sidebar: #151a17;     /* 苍松墨底 */
+      --bg-header: rgba(21, 26, 23, 0.85);
+      --bg-card: rgba(24, 30, 27, 0.8);
+      --bg-card-hover: rgba(32, 41, 37, 0.9);
+      --bg-inner: #0a0d0c;       /* 砚池深墨 */
+      --bg-input: #0a0d0c;
+      --text-main: #e8ebe6;      /* 莹白月色 */
+      --text-muted: #828e87;     /* 云雾松灰 */
+      --text-sub: #b8c2bc;       /* 霜青 */
+      --border-subtle: rgba(140, 160, 150, 0.15);
+      --border-focus: #529672;    /* 翡翠玉竹绿 */
+      --primary: #3b7e5c;        /* 沉稳冷翠青竹色 */
+      --primary-hover: #4ba074;
+      --primary-glow: rgba(59, 126, 92, 0.35);
+      --primary-text: #68b88f;
+      --primary-badge-bg: rgba(59, 126, 92, 0.18);
+      --tag-cloth: #b886c2;      /* 藕荷紫 */
+      --tag-food: #52b788;       /* 竹叶青 */
+      --tag-home: #d4a373;       /* 沉香木 */
+      --tag-travel: #64b5f6;     /* 远山淡黛蓝 */
+      --tag-spend: #e57373;      /* 丹砂红 */
+      --radius-box: 0.6rem;
+      --card-blur: 16px;
+    }
+
+    /* 🌟 极简风格 3：极致黑白极简 (Modern Monolith - 无彩色纯粹极简) */
+    :root[data-theme="mono-minimal"] {
+      --font-main: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
+      --font-heading: 'Plus Jakarta Sans', sans-serif;
+      --bg-page: #ffffff;
+      --bg-sidebar: #fafafa;
+      --bg-header: rgba(255, 255, 255, 0.9);
+      --bg-card: #ffffff;
+      --bg-card-hover: #fafafa;
+      --bg-inner: #f4f4f5;
+      --bg-input: #ffffff;
+      --text-main: #09090b;
+      --text-muted: #71717a;
+      --text-sub: #27272a;
+      --border-subtle: #e4e4e7;
+      --border-focus: #09090b;
+      --primary: #09090b;
+      --primary-hover: #27272a;
+      --primary-glow: rgba(0, 0, 0, 0.1);
+      --primary-text: #09090b;
+      --primary-badge-bg: #f4f4f5;
+      --tag-cloth: #52525b;
+      --tag-food: #27272a;
+      --tag-home: #3f3f46;
+      --tag-travel: #18181b;
+      --tag-spend: #09090b;
+      --radius-box: 0.375rem;
+      --card-blur: 0px;
+    }
+
+    /* 风格 4：深色极客微质感 (Slate Teal) */
+    :root[data-theme="slate-teal"] {
+      --font-main: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
+      --font-heading: 'Plus Jakarta Sans', sans-serif;
+      --bg-page: #020617;
+      --bg-sidebar: #0f172a;
+      --bg-header: rgba(15, 23, 42, 0.75);
+      --bg-card: rgba(15, 23, 42, 0.7);
+      --bg-card-hover: rgba(30, 41, 59, 0.8);
+      --bg-inner: #020617;
+      --bg-input: rgba(2, 6, 23, 0.85);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-sub: #cbd5e1;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus: #14b8a6;
+      --primary: #0d9488;
+      --primary-hover: #14b8a6;
+      --primary-glow: rgba(13, 148, 136, 0.3);
+      --primary-text: #2dd4bf;
+      --primary-badge-bg: rgba(13, 148, 136, 0.15);
+      --tag-cloth: #c084fc;
+      --tag-food: #34d399;
+      --tag-home: #fbbf24;
+      --tag-travel: #38bdf8;
+      --tag-spend: #f87171;
+      --radius-box: 1rem;
+      --card-blur: 16px;
+    }
+
+    /* 风格 5：北欧原木极简白 (Warm Nordic) */
+    :root[data-theme="warm-nordic"] {
+      --font-main: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
+      --font-heading: 'Plus Jakarta Sans', sans-serif;
+      --bg-page: #fbf9f5;
+      --bg-sidebar: #f3efe6;
+      --bg-header: rgba(243, 239, 230, 0.85);
+      --bg-card: #ffffff;
+      --bg-card-hover: #faf7f2;
+      --bg-inner: #f7f4ee;
+      --bg-input: #ffffff;
+      --text-main: #272320;
+      --text-muted: #847a71;
+      --text-sub: #4b443e;
+      --border-subtle: rgba(70, 50, 30, 0.09);
+      --border-focus: #c27d38;
+      --primary: #c27d38;
+      --primary-hover: #b06e2e;
+      --primary-glow: rgba(194, 125, 56, 0.2);
+      --primary-text: #a05c1b;
+      --primary-badge-bg: rgba(194, 125, 56, 0.12);
+      --tag-cloth: #9333ea;
+      --tag-food: #059669;
+      --tag-home: #d97706;
+      --tag-travel: #0284c7;
+      --tag-spend: #e11d48;
+      --radius-box: 1rem;
+      --card-blur: 8px;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      transition: background-color 0.35s cubic-bezier(0.16, 1, 0.3, 1), color 0.35s ease;
+    }
+
+    h1, h2, h3, .theme-heading {
+      font-family: var(--font-heading);
+    }
+
+    /* 中式印章质感徽章 */
+    .seal-badge {
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      position: relative;
+      letter-spacing: 0.05em;
+    }
+
+    .theme-sidebar {
+      background-color: var(--bg-sidebar);
+      border-color: var(--border-subtle);
+    }
+    .theme-header {
+      background-color: var(--bg-header);
+      border-color: var(--border-subtle);
+    }
+    .theme-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-box);
+      backdrop-filter: blur(var(--card-blur));
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .theme-card-hover:hover {
+      background-color: var(--bg-card-hover);
+      border-color: var(--border-focus);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.08), 0 0 12px -2px var(--primary-glow);
+    }
+    .theme-inner {
+      background-color: var(--bg-inner);
+      border: 1px solid var(--border-subtle);
+      border-radius: calc(var(--radius-box) * 0.75);
+    }
+    .theme-input {
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      border-radius: var(--radius-box);
+    }
+    .theme-input:focus {
+      border-color: var(--border-focus);
+      outline: none;
+      box-shadow: 0 0 0 1px var(--border-focus);
+    }
+    .theme-primary-btn {
+      background-color: var(--primary);
+      color: #ffffff;
+      border-radius: var(--radius-box);
+      transition: all 0.2s ease;
+    }
+    .theme-primary-btn:hover {
+      background-color: var(--primary-hover);
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+    .theme-badge-primary {
+      background-color: var(--primary-badge-bg);
+      color: var(--primary-text);
+      border: 1px solid var(--border-subtle);
+    }
+    .theme-active-nav {
+      background-color: var(--primary-badge-bg);
+      color: var(--primary-text);
+      border: 1px solid var(--border-subtle);
+      font-weight: 600;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(120, 110, 100, 0.25);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="h-full flex overflow-hidden">
+
+  <!-- 左侧全局导航 Sidebar -->
+  <aside class="w-64 flex-shrink-0 theme-sidebar border-r flex flex-col justify-between z-20 transition-colors duration-300">
+    <div>
+      <!-- Brand Logo / 带有中式宋体韵味或极简美感的品牌区 -->
+      <div class="h-20 flex items-center px-6 gap-3.5 border-b border-[var(--border-subtle)]">
+        <!-- 印章感方印图标 -->
+        <div class="w-10 h-10 flex items-center justify-center shadow-sm theme-primary-btn relative overflow-hidden" style="border-radius: calc(var(--radius-box) * 0.7);">
+          <span class="font-serif font-bold text-lg tracking-widest leading-none">生</span>
+        </div>
+        <div>
+          <span class="theme-heading font-black text-base tracking-wider flex items-center gap-1.5" style="color: var(--text-main);">
+            AI·生活管家
+            <span class="text-[10px] px-1.5 py-0.5 rounded seal-badge font-sans">貳.零</span>
+          </span>
+          <p class="text-[11px] tracking-wide" style="color: var(--text-muted);">格物致知 · 智享生活</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs (衣·食·住·行·支) -->
+      <div class="p-3.5 space-y-1">
+        <div class="px-3 py-2 text-[11px] font-semibold tracking-widest uppercase" style="color: var(--text-muted);">
+          · 日用居止 ·
+        </div>
+        
+        <button onclick="switchTab('overview')" id="nav-overview" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all theme-active-nav" style="border-radius: var(--radius-box);">
+          <div class="flex items-center gap-3">
+            <i data-lucide="compass" class="w-4 h-4"></i>
+            <span class="tracking-wide">今日总览 · 中枢</span>
+          </div>
+          <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--primary);"></span>
+        </button>
+
+        <button onclick="switchTab('clothing')" id="nav-clothing" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all hover:bg-[var(--bg-card-hover)]" style="border-radius: var(--radius-box); color: var(--text-sub);">
+          <div class="flex items-center gap-3">
+            <i data-lucide="shirt" class="w-4 h-4" style="color: var(--tag-cloth);"></i>
+            <span class="tracking-wide">衣 · 衣橱穿搭</span>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded theme-inner text-[11px]" style="color: var(--tag-cloth);">四十八件</span>
+        </button>
+
+        <button onclick="switchTab('food')" id="nav-food" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all hover:bg-[var(--bg-card-hover)]" style="border-radius: var(--radius-box); color: var(--text-sub);">
+          <div class="flex items-center gap-3">
+            <i data-lucide="soup" class="w-4 h-4" style="color: var(--tag-food);"></i>
+            <span class="tracking-wide">食 · 饮食调摄</span>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded theme-inner text-[11px]" style="color: var(--tag-food);">1,450 千卡</span>
+        </button>
+
+        <button onclick="switchTab('home')" id="nav-home" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all hover:bg-[var(--bg-card-hover)]" style="border-radius: var(--radius-box); color: var(--text-sub);">
+          <div class="flex items-center gap-3">
+            <i data-lucide="home" class="w-4 h-4" style="color: var(--tag-home);"></i>
+            <span class="tracking-wide">住 · 空间居所</span>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded theme-inner text-[11px]" style="color: var(--tag-home);">安适常温</span>
+        </button>
+
+        <button onclick="switchTab('travel')" id="nav-travel" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all hover:bg-[var(--bg-card-hover)]" style="border-radius: var(--radius-box); color: var(--text-sub);">
+          <div class="flex items-center gap-3">
+            <i data-lucide="navigation" class="w-4 h-4" style="color: var(--tag-travel);"></i>
+            <span class="tracking-wide">行 · 行程调度</span>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded theme-inner text-[11px]" style="color: var(--tag-travel);">晚间出差</span>
+        </button>
+
+        <button onclick="switchTab('spending')" id="nav-spending" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all hover:bg-[var(--bg-card-hover)]" style="border-radius: var(--radius-box); color: var(--text-sub);">
+          <div class="flex items-center gap-3">
+            <i data-lucide="wallet" class="w-4 h-4" style="color: var(--tag-spend);"></i>
+            <span class="tracking-wide">支 · 节度用度</span>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded theme-inner text-[11px]" style="color: var(--tag-spend);">用度五成</span>
+        </button>
+      </div>
+
+      <!-- Quick Context Info / 节气与天气 -->
+      <div class="p-3.5 mx-3.5 mt-3 theme-inner text-xs space-y-2.5">
+        <div class="flex items-center justify-between" style="color: var(--text-muted);">
+          <span>时序节令</span>
+          <span class="font-medium tracking-wide" style="color: var(--text-main);">仲春 · 春分次候</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span style="color: var(--text-muted);">地理天候</span>
+          <span class="font-medium flex items-center gap-1.5" style="color: var(--text-main);">
+            <i data-lucide="cloud-drizzle" class="w-3.5 h-3.5" style="color: var(--tag-travel);"></i> 沪上 · 拾肆度 细雨
+          </span>
+        </div>
+        <div class="flex items-center justify-between pt-1 border-t border-[var(--border-subtle)]">
+          <span style="color: var(--text-muted);">物联中枢</span>
+          <span class="text-[11px] flex items-center gap-1" style="color: var(--tag-food);">
+            <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--tag-food);"></span> 私域互联通达
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户身份标识 / 极简私印 -->
+    <div class="p-4 border-t border-[var(--border-subtle)] flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded theme-inner flex items-center justify-center font-serif font-bold text-xs" style="color: var(--primary);">
+          周
+        </div>
+        <div class="text-left">
+          <p class="text-xs font-semibold tracking-wider" style="color: var(--text-main);">周先生的阁子</p>
+          <p class="text-[10px]" style="color: var(--text-muted);">数据自守 · 本地无越</p>
+        </div>
+      </div>
+      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded theme-inner" style="color: var(--text-muted);">PRIV-01</span>
+    </div>
+  </aside>
+
+  <!-- 主体工作区 Main Area -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+    
+    <!-- 顶部常驻工具条 (新中式风格切换器 + 智能输入) -->
+    <header class="h-16 border-b theme-header px-8 flex items-center justify-between gap-4 z-10 flex-shrink-0 transition-colors duration-300">
+      
+      <!-- AI 意图指令输入框 -->
+      <div class="flex-1 max-w-xl relative">
+        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+          <i data-lucide="sparkle" class="w-4 h-4" style="color: var(--primary);"></i>
+        </div>
+        <input 
+          id="omniInput"
+          type="text" 
+          placeholder="向管家发付，例：『周五飞往燕京出差三日，请备行囊』 (⌘K)..." 
+          class="w-full pl-10 pr-20 py-2 text-sm theme-input transition tracking-wide"
+          onkeydown="if(event.key === 'Enter') handleAgentCommand()"
+        >
+        <div class="absolute inset-y-0 right-2 flex items-center">
+          <span class="text-[10px] px-1.5 py-0.5 rounded theme-inner font-mono" style="color: var(--text-muted);">回车发付</span>
+        </div>
+      </div>
+
+      <!-- 右侧控制区：意境风格切换 -->
+      <div class="flex items-center gap-3">
+
+        <!-- 🌟 新中式 & 极简核心主题选择器 🌟 -->
+        <div class="flex items-center gap-2 px-3 py-1.5 theme-card border">
+          <i data-lucide="swatch-book" class="w-3.5 h-3.5" style="color: var(--primary);"></i>
+          <span class="text-xs font-semibold" style="color: var(--text-muted);">意境风格:</span>
+          <select 
+            id="themeSelector"
+            onchange="changeTheme(this.value)"
+            class="bg-transparent text-xs font-medium cursor-pointer focus:outline-none"
+            style="color: var(--text-main);"
+          >
+            <option value="chinese-ink" class="text-neutral-900 bg-amber-50 font-serif">1. 宣纸水墨 · 宋式风骨 (中式极简)</option>
+            <option value="chinese-zen" class="text-neutral-100 bg-neutral-900 font-serif">2. 玄墨松青 · 现代禅意 (中式深色)</option>
+            <option value="mono-minimal" class="text-neutral-900 bg-white">3. 纯粹纯白 · 无彩极简 (Modern Minimal)</option>
+            <option value="slate-teal" class="text-neutral-100 bg-slate-900">4. 深色极客 · 质感微光 (Slate Teal)</option>
+            <option value="warm-nordic" class="text-neutral-900 bg-amber-50">5. 北欧原木 · 暖白温润 (Nordic Warm)</option>
+          </select>
+        </div>
+
+        <button onclick="triggerQuickAction('snap')" class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium theme-card theme-card-hover transition">
+          <i data-lucide="camera" class="w-3.5 h-3.5" style="color: var(--tag-cloth);"></i>
+          <span>随手录衣</span>
+        </button>
+        <button onclick="triggerQuickAction('bill')" class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium theme-card theme-card-hover transition">
+          <i data-lucide="receipt-text" class="w-3.5 h-3.5" style="color: var(--tag-spend);"></i>
+          <span>入账理度</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 可滚动内容区 Content Container -->
+    <div id="contentViewport" class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+
+      <!-- ==================== 1. 今日全景中枢 (OVERVIEW) ==================== -->
+      <div id="tab-content-overview" class="space-y-6">
+        
+        <!-- 今日跨域联动决策 Hero 看板 -->
+        <div class="theme-card p-6 relative overflow-hidden" style="border-left: 3px solid var(--primary);">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[var(--border-subtle)]">
+            <div>
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="px-2 py-0.5 rounded text-xs seal-badge flex items-center gap-1 font-serif">
+                  <i data-lucide="feather" class="w-3 h-3"></i> 跨域协同 · 行动备忘
+                </span>
+                <span class="text-xs" style="color: var(--text-muted);">乙巳年二月廿九 · 星期五 · 晴雨冷暖相宜</span>
+              </div>
+              <h1 class="text-xl font-bold tracking-wide" style="color: var(--text-main);">
+                今日日用综览：微雨通勤轻装、午宜清淡，晚间有北上燕京之行
+              </h1>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="adoptAllSuggestions()" class="px-4 py-2 text-xs font-semibold theme-primary-btn flex items-center gap-2">
+                <i data-lucide="check" class="w-4 h-4"></i> 一键应允全部谋划
+              </button>
+            </div>
+          </div>
+
+          <!-- 跨域卡片矩阵 (衣、食、住、行 四维流转) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-5">
+            
+            <!-- 衣 · 顺应天候 -->
+            <div class="p-4 theme-inner theme-card-hover flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold flex items-center gap-1.5" style="color: var(--tag-cloth);">
+                    <i data-lucide="shirt" class="w-3.5 h-3.5"></i> 衣 · 顺应天候
+                  </span>
+                  <span class="text-[10px]" style="color: var(--text-muted);">十四度 细雨</span>
+                </div>
+                <div class="flex items-center gap-3 mt-1.5">
+                  <div class="w-10 h-10 theme-card flex items-center justify-center flex-shrink-0" style="color: var(--tag-cloth);">
+                    <i data-lucide="cloud-rain" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                    <h4 class="text-xs font-bold truncate" style="color: var(--text-main);">防风防水连帽风衣</h4>
+                    <p class="text-[11px]" style="color: var(--text-muted);">配 羊毛圆领衫 / 防水靴</p>
+                  </div>
+                </div>
+                <p class="text-[11px] mt-2.5 leading-relaxed theme-card p-2.5" style="color: var(--text-sub);">
+                  <strong>联动注记：</strong>今夜至京城降温至零下一度，风衣内胆宜附包随行。
+                </p>
+              </div>
+              <div class="flex items-center justify-between mt-3 pt-2 border-t border-[var(--border-subtle)]">
+                <span class="text-[10px]" style="color: var(--text-muted);">契合度 九十六分</span>
+                <button class="text-xs font-medium" style="color: var(--tag-cloth);">按例整备 →</button>
+              </div>
+            </div>
+
+            <!-- 食 · 调摄节度 -->
+            <div class="p-4 theme-inner theme-card-hover flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold flex items-center gap-1.5" style="color: var(--tag-food);">
+                    <i data-lucide="soup" class="w-3.5 h-3.5"></i> 食 · 调摄节度
+                  </span>
+                  <span class="text-[10px] font-mono" style="color: var(--text-muted);">尚余 950 kcal</span>
+                </div>
+                <div class="space-y-1 mt-1 text-xs">
+                  <div class="flex justify-between">
+                    <span style="color: var(--text-sub);">早膳：素食燕麦乳</span>
+                    <span class="font-mono" style="color: var(--text-muted);">已录 500 kcal</span>
+                  </div>
+                  <div class="flex justify-between font-medium" style="color: var(--tag-food);">
+                    <span>午膳荐饮：鸡胸温蔬藜麦</span>
+                    <span class="font-mono">550 kcal</span>
+                  </div>
+                </div>
+                <p class="text-[11px] mt-2.5 leading-relaxed theme-card p-2.5" style="color: var(--text-sub);">
+                  <strong>管家小语：</strong>晚间舟车机上餐食偏重碳水，午间当多纳高蛋白清润之物。
+                </p>
+              </div>
+              <div class="flex items-center justify-between mt-3 pt-2 border-t border-[var(--border-subtle)]">
+                <span class="text-[10px]" style="color: var(--text-muted);">蛋白四成</span>
+                <button class="text-xs font-medium" style="color: var(--tag-food);">膳毕录入 →</button>
+              </div>
+            </div>
+
+            <!-- 住 · 庭轩温湿度 -->
+            <div class="p-4 theme-inner theme-card-hover flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold flex items-center gap-1.5" style="color: var(--tag-home);">
+                    <i data-lucide="home" class="w-3.5 h-3.5"></i> 住 · 庭轩安适
+                  </span>
+                  <span class="text-[10px]" style="color: var(--tag-food);">安居无虞</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                  <div class="p-2 theme-card">
+                    <span class="text-[10px] block" style="color: var(--text-muted);">堂室温湿</span>
+                    <span class="text-xs font-bold" style="color: var(--text-main);">22.4°C / 54%</span>
+                  </div>
+                  <div class="p-2 theme-card">
+                    <span class="text-[10px] block" style="color: var(--text-muted);">气脉循环</span>
+                    <span class="text-xs font-bold" style="color: var(--tag-food);">净如山林</span>
+                  </div>
+                </div>
+                <p class="text-[11px] mt-2.5 leading-relaxed theme-card p-2.5" style="color: var(--text-sub);">
+                  <strong>耗材提点：</strong>净水机初道滤芯存余一成二，已列采购单。
+                </p>
+              </div>
+              <div class="flex items-center justify-between mt-3 pt-2 border-t border-[var(--border-subtle)]">
+                <span class="text-[10px]" style="color: var(--tag-home);">待离家静默</span>
+                <button class="text-xs font-medium" style="color: var(--tag-home);">空间中枢 →</button>
+              </div>
+            </div>
+
+            <!-- 行与支 · 舟车千里 -->
+            <div class="p-4 theme-inner theme-card-hover flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold flex items-center gap-1.5" style="color: var(--tag-travel);">
+                    <i data-lucide="send" class="w-3.5 h-3.5"></i> 行 · 舟车行程
+                  </span>
+                  <span class="text-[10px] font-mono" style="color: var(--text-muted);">戌初启程</span>
+                </div>
+                <div>
+                  <h4 class="text-xs font-bold" style="color: var(--text-main);">CA1518 虹桥 ➔ 首都</h4>
+                  <p class="text-[11px]" style="color: var(--text-muted);">二号航站楼 · 建议申末 (17:40) 出行</p>
+                </div>
+                <p class="text-[11px] mt-2.5 leading-relaxed theme-card p-2.5" style="color: var(--text-sub);">
+                  <strong>行囊验看：</strong>已拟八件随身清规，离舍时将自启严防。
+                </p>
+              </div>
+              <div class="flex items-center justify-between mt-3 pt-2 border-t border-[var(--border-subtle)]">
+                <span class="text-[10px]" style="color: var(--text-muted);">用度留存 ¥2,400</span>
+                <button class="text-xs font-medium" style="color: var(--tag-travel);">检视行囊 →</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 详细概览：用度分理 + 物联调度 + 履历日程 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          <!-- 左：用度理财 (衣食住行四口径) -->
+          <div class="theme-card p-6">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-[var(--border-subtle)]">
+              <div class="flex items-center gap-2">
+                <i data-lucide="scale" class="w-4 h-4" style="color: var(--primary);"></i>
+                <h3 class="text-sm font-bold" style="color: var(--text-main);">本月用度节度 (衣食住行)</h3>
+              </div>
+              <span class="text-xs" style="color: var(--text-muted);">距月结四日</span>
+            </div>
+
+            <div class="flex items-baseline justify-between mb-3">
+              <div>
+                <span class="text-2xl font-black font-mono tracking-tight" style="color: var(--text-main);">¥ 6,840.50</span>
+                <span class="text-xs ml-1" style="color: var(--text-muted);">/ 节度本金 ¥ 11,500</span>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded seal-badge">
+                得当 · 余四成
+              </span>
+            </div>
+
+            <!-- 四维进度条 -->
+            <div class="space-y-3 pt-2">
+              <div>
+                <div class="flex justify-between text-xs mb-1" style="color: var(--text-sub);">
+                  <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--tag-cloth);"></span>衣 · 采买洗护</span>
+                  <span class="font-mono" style="color: var(--text-muted);">¥ 820 / 1,200</span>
+                </div>
+                <div class="w-full theme-inner h-1 overflow-hidden">
+                  <div class="h-full" style="width: 68%; background-color: var(--tag-cloth);"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1" style="color: var(--text-sub);">
+                  <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--tag-food);"></span>食 · 柴米珍羞</span>
+                  <span class="font-mono" style="color: var(--text-muted);">¥ 2,860 / 4,000</span>
+                </div>
+                <div class="w-full theme-inner h-1 overflow-hidden">
+                  <div class="h-full" style="width: 71%; background-color: var(--tag-food);"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1" style="color: var(--text-sub);">
+                  <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--tag-home);"></span>住 · 薪水耗材</span>
+                  <span class="font-mono" style="color: var(--text-muted);">¥ 1,420 / 2,300</span>
+                </div>
+                <div class="w-full theme-inner h-1 overflow-hidden">
+                  <div class="h-full" style="width: 61%; background-color: var(--tag-home);"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1" style="color: var(--text-sub);">
+                  <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--tag-travel);"></span>行 · 舟车馆驿</span>
+                  <span class="font-mono" style="color: var(--text-muted);">¥ 1,740 / 4,000</span>
+                </div>
+                <div class="w-full theme-inner h-1 overflow-hidden">
+                  <div class="h-full" style="width: 43%; background-color: var(--tag-travel);"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 中：空间即时调度 (住) -->
+          <div class="theme-card p-6">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-[var(--border-subtle)]">
+              <div class="flex items-center gap-2">
+                <i data-lucide="home" class="w-4 h-4" style="color: var(--tag-home);"></i>
+                <h3 class="text-sm font-bold" style="color: var(--text-main);">空间即时调度 (物联)</h3>
+              </div>
+              <span class="text-xs" style="color: var(--text-muted);">私域直连</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <button onclick="toggleScene('home')" class="p-3 theme-inner theme-card-hover text-left flex items-center justify-between">
+                <div>
+                  <i data-lucide="sun" class="w-4 h-4 mb-1" style="color: var(--tag-home);"></i>
+                  <span class="text-xs font-bold block" style="color: var(--text-main);">在室舒畅</span>
+                  <span class="text-[10px]" style="color: var(--primary);">当前行用</span>
+                </div>
+                <div class="w-1.5 h-1.5 rounded-full" style="background-color: var(--primary);"></div>
+              </button>
+
+              <button onclick="toggleScene('away')" class="p-3 theme-inner theme-card-hover text-left flex items-center justify-between">
+                <div>
+                  <i data-lucide="shield" class="w-4 h-4 mb-1" style="color: var(--text-muted);"></i>
+                  <span class="text-xs font-bold block" style="color: var(--text-main);">全舍锁闭</span>
+                  <span class="text-[10px]" style="color: var(--text-muted);">离家静防</span>
+                </div>
+                <div class="w-1.5 h-1.5 rounded-full theme-inner"></div>
+              </button>
+            </div>
+
+            <div class="space-y-2.5">
+              <div class="flex items-center justify-between p-2.5 theme-inner">
+                <div class="flex items-center gap-2.5">
+                  <i data-lucide="wind" class="w-4 h-4" style="color: var(--primary);"></i>
+                  <div>
+                    <span class="text-xs font-semibold block" style="color: var(--text-main);">气脉恒温调度</span>
+                    <span class="text-[10px]" style="color: var(--text-muted);">常定廿三度 · 静音微风</span>
+                  </div>
+                </div>
+                <span class="text-xs font-medium" style="color: var(--tag-food);">流转中</span>
+              </div>
+
+              <div class="flex items-center justify-between p-2.5 theme-inner">
+                <div class="flex items-center gap-2.5">
+                  <i data-lucide="lock" class="w-4 h-4" style="color: var(--tag-home);"></i>
+                  <div>
+                    <span class="text-xs font-semibold block" style="color: var(--text-main);">户枢门禁防范</span>
+                    <span class="text-[10px]" style="color: var(--text-muted);">关锁紧实 · 蓄电充沛</span>
+                  </div>
+                </div>
+                <span class="text-xs font-medium" style="color: var(--tag-food);">妥善</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右：一日历程 (日程行动) -->
+          <div class="theme-card p-6">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-[var(--border-subtle)]">
+              <div class="flex items-center gap-2">
+                <i data-lucide="calendar" class="w-4 h-4" style="color: var(--tag-travel);"></i>
+                <h3 class="text-sm font-bold" style="color: var(--text-main);">一日历程行动</h3>
+              </div>
+              <span class="text-xs" style="color: var(--text-muted);">三项行止</span>
+            </div>
+
+            <div class="space-y-3 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-[var(--border-subtle)]">
+              
+              <div class="flex items-start gap-3 relative">
+                <div class="w-6 h-6 rounded-full theme-card flex items-center justify-center z-10 flex-shrink-0 mt-0.5" style="color: var(--tag-food);">
+                  <i data-lucide="check" class="w-3 h-3"></i>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold" style="color: var(--text-main);">晨间散步健体 五公里</p>
+                  <p class="text-[11px]" style="color: var(--text-muted);">卯正 · 动能 360 kcal 已记入体魄薄</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3 relative">
+                <div class="w-6 h-6 rounded-full theme-card flex items-center justify-center z-10 flex-shrink-0 mt-0.5" style="color: var(--tag-travel);">
+                  <i data-lucide="clock" class="w-3 h-3"></i>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold" style="color: var(--text-main);">检点行囊与路途文书</p>
+                  <p class="text-[11px]" style="color: var(--text-muted);">申初 · 印鉴、风衣内胆、便携仪具入匣</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3 relative">
+                <div class="w-6 h-6 rounded-full theme-card flex items-center justify-center z-10 flex-shrink-0 mt-0.5" style="color: var(--tag-travel);">
+                  <i data-lucide="send" class="w-3 h-3"></i>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold" style="color: var(--text-main);">CA1518 航班起程</p>
+                  <p class="text-[11px]" style="color: var(--text-muted);">戌初 · 燕京寒气凝重，接引车马已定</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ==================== 2. 衣橱工作台 (CLOTHING) ==================== -->
+      <div id="tab-content-clothing" class="hidden space-y-6">
+        <div class="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+          <div>
+            <h2 class="text-lg font-bold flex items-center gap-2" style="color: var(--text-main);">
+              <i data-lucide="shirt" class="w-5 h-5" style="color: var(--tag-cloth);"></i>
+              衣 · 衣橱收纳与穿戴调协
+            </h2>
+            <p class="text-xs mt-1" style="color: var(--text-muted);">随手拍像入库、AI 智能归类打标与随令穿搭谋划</p>
+          </div>
+          <button onclick="simulateUploadClothing()" class="px-4 py-2 text-xs font-semibold theme-primary-btn flex items-center gap-2">
+            <i data-lucide="camera" class="w-4 h-4"></i> 拍摄新物 (AI 识物入库)
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div class="theme-card p-4 theme-card-hover">
+            <div class="h-32 theme-inner flex items-center justify-center mb-3">
+              <i data-lucide="shirt" class="w-10 h-10" style="color: var(--tag-cloth);"></i>
+            </div>
+            <h4 class="text-xs font-bold truncate" style="color: var(--text-main);">藏青极简防风风衣</h4>
+            <p class="text-[11px]" style="color: var(--text-muted);">防泼水 · 春秋微雨</p>
+            <div class="flex justify-between items-center mt-3 pt-2 border-t border-[var(--border-subtle)] text-[11px]">
+              <span style="color: var(--text-muted);">着十二回</span>
+              <span class="font-medium" style="color: var(--tag-cloth);">九十六分契合</span>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 theme-card-hover">
+            <div class="h-32 theme-inner flex items-center justify-center mb-3">
+              <i data-lucide="shield" class="w-10 h-10" style="color: var(--tag-cloth);"></i>
+            </div>
+            <h4 class="text-xs font-bold truncate" style="color: var(--text-main);">浅麻灰圆领羊毛衫</h4>
+            <p class="text-[11px]" style="color: var(--text-muted);">纯美利奴 · 保暖透气</p>
+            <div class="flex justify-between items-center mt-3 pt-2 border-t border-[var(--border-subtle)] text-[11px]">
+              <span style="color: var(--text-muted);">着二十四回</span>
+              <span class="font-medium" style="color: var(--tag-cloth);">九十二分契合</span>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 theme-card-hover">
+            <div class="h-32 theme-inner flex items-center justify-center mb-3">
+              <i data-lucide="footprints" class="w-10 h-10" style="color: var(--tag-cloth);"></i>
+            </div>
+            <h4 class="text-xs font-bold truncate" style="color: var(--text-main);">深褐切尔西短靴</h4>
+            <p class="text-[11px]" style="color: var(--text-muted);">植鞣皮革 · 晴雨两便</p>
+            <div class="flex justify-between items-center mt-3 pt-2 border-t border-[var(--border-subtle)] text-[11px]">
+              <span style="color: var(--text-muted);">着十九回</span>
+              <span class="font-medium" style="color: var(--tag-cloth);">九十五分契合</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 其余工作台占位 (FOOD/HOME/TRAVEL/SPENDING) -->
+      <div id="tab-content-food" class="hidden space-y-4">
+        <h2 class="text-base font-bold" style="color: var(--text-main);">食 · 饮食调摄与营养薄</h2>
+        <div class="theme-card p-6"><p class="text-xs" style="color: var(--text-muted);">顺应四时节气，清润平衡，自适当前意境。</p></div>
+      </div>
+      <div id="tab-content-home" class="hidden space-y-4">
+        <h2 class="text-base font-bold" style="color: var(--text-main);">住 · 空间居所物联</h2>
+        <div class="theme-card p-6"><p class="text-xs" style="color: var(--text-muted);">私域智能中枢，调气调温，静若深山。</p></div>
+      </div>
+      <div id="tab-content-travel" class="hidden space-y-4">
+        <h2 class="text-base font-bold" style="color: var(--text-main);">行 · 舟车千里行程</h2>
+        <div class="theme-card p-6"><p class="text-xs" style="color: var(--text-muted);">起居有定，出入平安，行程备忘无忧。</p></div>
+      </div>
+      <div id="tab-content-spending" class="hidden space-y-4">
+        <h2 class="text-base font-bold" style="color: var(--text-main);">支 · 节度用度</h2>
+        <div class="theme-card p-6"><p class="text-xs" style="color: var(--text-muted);">量入为出，衣食住行四端明晰归纳。</p></div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- 交互弹窗 -->
+  <div id="actionModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="theme-card max-w-lg w-full p-6 shadow-xl relative" style="border-top: 3px solid var(--primary);">
+      <button onclick="closeModal()" class="absolute top-4 right-4" style="color: var(--text-muted);">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-9 h-9 theme-inner flex items-center justify-center" style="color: var(--primary);">
+          <i data-lucide="scroll" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 id="modalTitle" class="text-base font-bold" style="color: var(--text-main);">AI 管家发付提示</h3>
+          <p id="modalSubtitle" class="text-xs" style="color: var(--text-muted);">调度已整饬就绪</p>
+        </div>
+      </div>
+      <div id="modalBody" class="text-xs theme-inner p-4 leading-relaxed font-sans" style="color: var(--text-sub);">
+      </div>
+      <div class="mt-5 flex justify-end gap-2.5">
+        <button onclick="closeModal()" class="px-4 py-2 text-xs font-medium theme-inner" style="color: var(--text-muted);">罢免</button>
+        <button onclick="confirmModalAction()" class="px-4 py-2 text-xs font-semibold theme-primary-btn">准允执行</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // 🌟 动态主题切换逻辑 🌟
+    function changeTheme(themeName) {
+      document.documentElement.setAttribute('data-theme', themeName);
+      localStorage.setItem('ai_life_theme', themeName);
+      setTimeout(() => lucide.createIcons(), 50);
+    }
+
+    // 默认选用「宣纸水墨 · 宋式风骨」
+    const savedTheme = localStorage.getItem('ai_life_theme') || 'chinese-ink';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeSelector').value = savedTheme;
+
+    // 选项卡切换
+    function switchTab(tabId) {
+      const tabs = ['overview', 'clothing', 'food', 'home', 'travel', 'spending'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`nav-${t}`);
+        const content = document.getElementById(`tab-content-${t}`);
+        if (t === tabId) {
+          btn.className = 'tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all theme-active-nav';
+          content.classList.remove('hidden');
+        } else {
+          btn.className = 'tab-btn w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-all hover:bg-[var(--bg-card-hover)]';
+          content.classList.add('hidden');
+        }
+      });
+      lucide.createIcons();
+    }
+
+    // AI 全局指令响应
+    function handleAgentCommand() {
+      const input = document.getElementById('omniInput');
+      const val = input.value.trim();
+      if (!val) return;
+
+      const modal = document.getElementById('actionModal');
+      document.getElementById('modalTitle').innerText = 'AI 管家领命 · 跨域协同已拟定';
+      document.getElementById('modalSubtitle').innerText = `收悉示下: "${val}"`;
+      document.getElementById('modalBody').innerHTML = `
+        <div style="color: var(--primary);" class="font-semibold mb-2">⚡ 谨遵钧令，已按「衣食住行支」通盘整饬：</div>
+        <ul class="space-y-1.5 list-disc list-inside">
+          <li><strong>【行】</strong> 燕京行程时序排定，已生随行行囊校验清规</li>
+          <li><strong>【衣】</strong> 查知北方天寒，荐带防风风衣并装附保暖内胆</li>
+          <li><strong>【住】</strong> 物联中枢待君启程，即启严防锁闭、切断余火余电</li>
+          <li><strong>【食】</strong> 午膳定当清润少油，以备晚间旅途辛劳</li>
+          <li><strong>【支】</strong> 另辟公干差旅专账（定金 ¥2,400）</li>
+        </ul>
+      `;
+      modal.classList.remove('hidden');
+      input.value = '';
+    }
+
+    function closeModal() {
+      document.getElementById('actionModal').classList.add('hidden');
+    }
+    function confirmModalAction() {
+      closeModal();
+      alert('已依命执行！诸事皆已记录妥当。');
+    }
+    function adoptAllSuggestions() {
+      alert('✅ 今日衣食住行各项谋划，已全数确认准行！');
+    }
+    function toggleScene(type) {
+      if(type === 'home') {
+        alert('🏡 已启【在室舒畅】：气脉调和，室温常定廿三度');
+      } else {
+        alert('🔒 已启【全舍锁闭】：门禁上膛，余电休眠，谨防外虞');
+      }
+    }
+    function triggerQuickAction(type) {
+      if(type === 'snap') {
+        simulateUploadClothing();
+      } else {
+        alert('📑 请奉上记账单据或凭证，管家即刻按衣食住行四端入册归档。');
+      }
+    }
+    function simulateUploadClothing() {
+      const modal = document.getElementById('actionModal');
+      document.getElementById('modalTitle').innerText = '多模态视觉格物';
+      document.getElementById('modalSubtitle').innerText = '衣物形质特征识别';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="color: var(--tag-cloth);" class="font-semibold mb-2">📸 识物造册毕：</div>
+        <div><strong>形制品类：</strong> 美利奴纯羊毛圆领衫</div>
+        <div><strong>设色：</strong> 浅麻灰 / 焦墨淡染</div>
+        <div><strong>应候：</strong> 仲春 / 晚秋 / 初冬</div>
+        <div><strong>风骨标签：</strong> 雅致极简 / 儒雅通勤 / 温润御寒</div>
+      `;
+      modal.classList.remove('hidden');
+    }
+
+    // 快捷键 ⌘K / Ctrl+K
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('omniInput').focus();
+      }
+    });
+  </script>
+</body>
+</html>

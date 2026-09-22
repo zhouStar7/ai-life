@@ -7,19 +7,30 @@ AI 生活管家工作台：从**衣食住行**四个维度管理日常生活，�
 ## 仓库结构
 
 ```
-docs/                 需求与设计规范
-designs/
-  overview/           今日概览
-  modules/            衣橱 / 饮食 / 家居 / 出行（统一规范版）
-  spending/           支出统计
-  archive/            统一规范前的初版稿
+docs/                 需求与设计规范、可行性分析报告
+designs/              静态原型稿（PNG）
+ai-life-designs/      多视觉风格高保真交互原型（HTML + Tailwind + Lucide）
 ```
 
 ## 产品导航
 
 `今日概览` → `衣橱` → `饮食` → `家居` → `出行` → `支出统计` → `设置`
 
-## 设计稿一览
+## 交互设计稿（HTML 原型）
+
+详见 [`ai-life-designs/README.md`](ai-life-designs/README.md)：
+
+| 模块 | 设计稿文件 | 视觉风格 | 说明 |
+|------|-----------|----------|------|
+| **画廊索引** | [ai-life-designs/index.html](ai-life-designs/index.html) | Editorial 画廊风 | 视觉索引与多风格导览 |
+| **衣 · 衣橱** | [ai-life-designs/wardrobe.html](ai-life-designs/wardrobe.html) | 时尚杂志编辑风 | 衬线版式、胶囊穿搭、象牙白底 |
+| **食 · 饮食** | [ai-life-designs/diet.html](ai-life-designs/diet.html) | 暖阳有机风 | 奶油色底、卡路里平衡环、轻量记录 |
+| **住 · 家居** | [ai-life-designs/home.html](ai-life-designs/home.html) | 深色中控面板 | 状态呼吸灯、传感器监控、全屋联动 |
+| **行 · 出行** | [ai-life-designs/travel.html](ai-life-designs/travel.html) | 瑞士国际主义 | 12 列严网格、机票票据质感、行程清单 |
+| **支 · 支出** | [ai-life-designs/spending.html](ai-life-designs/spending.html) | 暗夜极客仪表盘 | JetBrains Mono 等宽字系、单一青色强调 |
+| **综合工作台** | [ai-life-designs/ai-life-redesign.html](ai-life-designs/ai-life-redesign.html) | 多主题切换 (宋式/极客/北欧等) | 跨域协同引擎、⌘K 全局 Omni Agent |
+
+## 设计稿一览（静态切图）
 
 | 页面 | 文件 |
 |------|------|
@@ -32,6 +43,7 @@ designs/
 
 ## 文档
 
+- [项目可行性深度分析报告](docs/feasibility-analysis.md)
 - [二级页需求说明](docs/requirements.md)
 - [视觉与导航规范](docs/design-system.md)
 - [支出分类口径](docs/spending-taxonomy.md)
