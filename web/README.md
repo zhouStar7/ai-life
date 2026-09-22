@@ -7,4 +7,4 @@ npm install
 npm run dev
 ```
 
-浏览器打开 http://localhost:5173 。数据只保存在当前页面会话中。
+浏览器打开 http://localhost:514 。数据只保存在当前页面会话中。

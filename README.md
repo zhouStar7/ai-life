@@ -59,7 +59,7 @@ npm install
 npm run dev
 ```
 
-打开 http://localhost:5173 。顶栏搜索支持 ⌘K / Ctrl+K。
+打开 http://localhost:514 。顶栏搜索支持 ⌘K / Ctrl+K。
 
 ## 优先级
 
