@@ -10,6 +10,7 @@ AI 生活管家工作台：从**衣食住行**四个维度管理日常生活，�
 docs/                 需求与设计规范、可行性分析报告
 designs/              静态原型稿（PNG）
 ai-life-designs/      多视觉风格高保真交互原型（HTML + Tailwind + Lucide）
+web/                  可运行演示（今日概览与衣食住行支）
 ```
 
 ## 产品导航
@@ -47,6 +48,18 @@ ai-life-designs/      多视觉风格高保真交互原型（HTML + Tailwind + L
 - [二级页需求说明](docs/requirements.md)
 - [视觉与导航规范](docs/design-system.md)
 - [支出分类口径](docs/spending-taxonomy.md)
+
+## 运行演示
+
+演示在 `web/`，数据只存在当前浏览器会话里。
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+打开 http://localhost:1117 。顶栏搜索支持 ⌘K / Ctrl+K。
 
 ## 优先级
 
