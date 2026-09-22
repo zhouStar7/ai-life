@@ -23,14 +23,8 @@ export function WardrobePage() {
   return (
     <>
       <header className="page-head">
-        <div>
-          <p className="kicker">AI Life · 衣橱卷</p>
-          <h1 className="display">本周衣橱</h1>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <p className="display" style={{ fontSize: 36 }}>{store.items.length} <span style={{ fontSize: 14, fontWeight: 400 }}>件单品</span></p>
-          <button type="button" className="btn" data-testid="add-item" onClick={() => setEditor('new')}>拍照录入</button>
-        </div>
+        <h1 className="display" style={{ fontSize: 32 }}>衣橱</h1>
+        <button type="button" className="btn" data-testid="add-item" onClick={() => setEditor('new')}>添加单品</button>
       </header>
       <div className="layout-2">
         <section>
@@ -48,13 +42,8 @@ export function WardrobePage() {
             <div className="card">
               <Empty
                 title="衣橱还是空的"
-                desc="可以手动记一件，或从相册导入。演示里拍照会转到手动添加。"
-                action={
-                  <>
-                    <button type="button" className="btn" onClick={() => setEditor('new')}>手动添加</button>
-                    <button type="button" className="btn-ghost" onClick={() => setEditor('new')}>拍照导入</button>
-                  </>
-                }
+                desc="先添加一件单品，分类、颜色和场合可以一起记下。"
+                action={<button type="button" className="btn" onClick={() => setEditor('new')}>添加单品</button>}
               />
             </div>
           ) : visible.length === 0 ? (
@@ -104,7 +93,6 @@ export function WardrobePage() {
                 </div>
               </>
             )}
-            <button type="button" className="btn-text" onClick={store.toggleWeather}>{store.weatherOn ? '模拟无天气' : '恢复天气'}</button>
           </article>
           <SpendCard tag="衣" label="本月衣类支出" />
           <article className="card">

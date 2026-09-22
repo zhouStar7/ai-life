@@ -31,11 +31,8 @@ export function DietPage() {
   return (
     <>
       <header className="page-head">
-        <div>
-          <p className="kicker">AI Life · 食</p>
-          <h1 className="display" style={{ fontSize: 36 }}>今天的餐桌</h1>
-        </div>
-        <button type="button" className="btn" data-testid="add-meal" onClick={() => setEditor('new')}>拍餐录入</button>
+        <h1 className="display" style={{ fontSize: 32 }}>饮食</h1>
+        <button type="button" className="btn" data-testid="add-meal" onClick={() => setEditor('new')}>添加餐次</button>
       </header>
       <div className="layout-2">
         <section className="stack">

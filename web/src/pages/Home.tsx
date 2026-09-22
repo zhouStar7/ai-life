@@ -15,10 +15,10 @@ export function HomePage() {
     <>
       <header className="page-head">
         <div>
-          <h1 className="display" style={{ fontSize: 28 }}>家居中控</h1>
-          <p className="mono muted">HOME ASSISTANT · {online} DEVICES ONLINE</p>
+          <h1 className="display" style={{ fontSize: 32 }}>家居</h1>
+          <p className="muted">{online} 台在线 · {store.devices.length - online} 台离线{store.activeScene ? ` · 当前场景 ${store.activeScene}` : ''}</p>
         </div>
-        <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : '中枢在线'}</span>
+        <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : '家里状态正常'}</span>
       </header>
       {store.devices.length === 0 ? (
         <div className="stack">
@@ -29,13 +29,6 @@ export function HomePage() {
         </div>
       ) : (
         <>
-          <section className="card banner">
-            <div>
-              <strong><i className={abnormal ? 'dot bad' : 'dot'} />{abnormal ? '有设备需要看一眼' : '家里状态正常'}</strong>
-              <p className="muted">{online} 台在线 · {store.devices.length - online} 台离线</p>
-            </div>
-            {store.activeScene ? <span className="pill active">当前场景 · {store.activeScene}</span> : <span className="muted">还没切换场景</span>}
-          </section>
           <section className="card" style={{ marginBottom: 14 }}>
             <h2>场景</h2>
             <div className="scene-row" style={{ marginTop: 10 }}>
@@ -67,7 +60,6 @@ export function HomePage() {
                   </header>
                   <p className={device.offline ? 'status bad' : 'status'}>{device.offline ? '离线 · 保留最后状态' : device.on ? '开启' : '关闭'}</p>
                   {device.paramLabel ? <p>{device.paramLabel} {device.paramValue}</p> : <p className="muted">没有额外参数</p>}
-                  <button type="button" className="btn-text" onClick={() => store.unbindDevice(device.id)}>解绑</button>
                 </article>
               ))}
             </div>

@@ -12,14 +12,8 @@ export function TravelPage() {
   return (
     <>
       <header className="page-head">
-        <div>
-          <p className="kicker">AI Life · Travel</p>
-          <h1 className="display">行<br />·<br />出行</h1>
-        </div>
-        <div className="row-actions">
-          <button type="button" className="btn" data-testid="new-trip" onClick={() => setCreating(true)}>新建行程</button>
-          <button type="button" className="btn-ghost" onClick={() => setCreating(true)}>导入订单</button>
-        </div>
+        <h1 className="display" style={{ fontSize: 32 }}>出行</h1>
+        <button type="button" className="btn" data-testid="new-trip" onClick={() => setCreating(true)}>新建行程</button>
       </header>
       {store.trips.length === 0 || !trip ? (
         <div className="stack">
@@ -119,7 +113,6 @@ function TripModal({ onClose }: { onClose: () => void }) {
         <button type="button" className="pill" onClick={() => applyTemplate('weekend')}>周末模板</button>
         <button type="button" className="pill" onClick={() => applyTemplate('work')}>出差模板</button>
       </div>
-      <p className="muted">订单导入还没接通，可以先用模板或手写。</p>
       <form onSubmit={(event) => { event.preventDefault(); if (!draft.title.trim()) return; store.addTrip({ ...draft, title: draft.title.trim(), dateLabel: draft.dateLabel.trim() || '日期待定' }); onClose(); }}>
         <div className="form-grid" style={{ marginTop: 12 }}>
           <Field label="名称" wide><input autoFocus required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></Field>

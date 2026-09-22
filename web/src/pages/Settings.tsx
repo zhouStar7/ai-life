@@ -17,15 +17,10 @@ export function SettingsPage() {
     <div className="settings">
       <header className="page-head">
         <div>
-          <p className="kicker">AI Life · 设置</p>
-          <h1 className="display" style={{ fontSize: 32 }}>阁中偏好</h1>
-          <p className="muted">预算和数据来源留在这里。意境风格在顶栏切换。</p>
+          <h1 className="display" style={{ fontSize: 32 }}>设置</h1>
+          <p className="muted">预算和数据来源留在这里。</p>
         </div>
       </header>
-      <article className="card">
-        <h2>账号</h2>
-        <p style={{ marginTop: 8 }}>星宇 · 当前为本地演示，没有登录。</p>
-      </article>
       <article className="card">
         <h2>月预算</h2>
         <p className="muted">支出统计和各模块预算条会读这里的数字。</p>
@@ -50,26 +45,6 @@ export function SettingsPage() {
         <div className="toggle-row"><span>智能家居</span><span className="chip">演示数据</span></div>
         <p className="muted">真实账单和设备对接不在这一期。</p>
       </article>
-      <article className="card">
-        <h2>通知</h2>
-        <Notice label="穿搭提醒" name="outfit" />
-        <Notice label="预算提醒" name="budget" />
-        <Notice label="设备异常" name="device" />
-      </article>
-      <article className="card">
-        <h2>主题</h2>
-        <p style={{ marginTop: 8 }}>青绿 · 当前唯一主题</p>
-      </article>
     </div>
-  );
-}
-
-function Notice({ label, name }: { label: string; name: 'outfit' | 'budget' | 'device' }) {
-  const store = useStore();
-  return (
-    <label className="toggle-row">
-      <span>{label}</span>
-      <input type="checkbox" checked={store.notices[name]} onChange={(event) => store.setNotice(name, event.target.checked)} />
-    </label>
   );
 }

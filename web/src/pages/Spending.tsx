@@ -39,13 +39,10 @@ export function SpendingPage() {
     <>
       <header className="page-head">
         <div>
-          <p className="kicker">AI Life · Finance</p>
-          <h1 className="display" style={{ fontSize: 28 }}>支出仪表盘 · 2026 年 9 月</h1>
+          <h1 className="display" style={{ fontSize: 32 }}>支出统计</h1>
+          <p className="muted">2026 年 9 月</p>
         </div>
-        <div className="row-actions">
-          <button type="button" className="btn-ghost" onClick={() => setAdding(true)}>导入账单</button>
-          <button type="button" className="btn" data-testid="add-expense" onClick={() => setAdding(true)}>记一笔</button>
-        </div>
+        <button type="button" className="btn" data-testid="add-expense" onClick={() => setAdding(true)}>记一笔</button>
       </header>
       <section className="grid-4">
         <article className="card kpi"><span>本月总支出</span><strong>{yuan(total)}</strong></article>
@@ -185,7 +182,7 @@ function ExpenseModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="记一笔" onClose={onClose}>
-      <p className="muted">账单导入还没接通，先手动记。统计页只汇总 2026 年 9 月。</p>
+      <p className="muted">统计页只汇总 2026 年 9 月。</p>
       <form onSubmit={(event) => { event.preventDefault(); save(); }} style={{ marginTop: 12 }}>
         <div className="form-grid">
           <Field label="模块">

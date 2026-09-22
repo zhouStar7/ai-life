@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { todayLabel } from '../format';
 import { useStore } from '../store';
 import { DietPage } from '../pages/Diet';
 import { HomePage } from '../pages/Home';
@@ -12,21 +11,14 @@ import { WardrobePage } from '../pages/Wardrobe';
 import { Icon } from './Icon';
 import { Modal } from './ui';
 
-const THEMES = [
-  { id: 'chinese-ink', label: '宣纸水墨 · 宋式风骨' },
-  { id: 'chinese-zen', label: '玄墨松青 · 现代禅意' },
-  { id: 'mono-minimal', label: '纯粹纯白 · 无彩极简' },
-  { id: 'slate-teal', label: '深色极客 · 质感微光' },
-  { id: 'warm-nordic', label: '北欧原木 · 暖白温润' },
-];
-
 const NAV = [
-  { to: '/', label: '今日总览 · 中枢', icon: 'overview' as const, page: 'overview' },
-  { to: '/wardrobe', label: '衣 · 衣橱穿搭', icon: 'wardrobe' as const, page: 'wardrobe' },
-  { to: '/diet', label: '食 · 饮食调摄', icon: 'diet' as const, page: 'diet' },
-  { to: '/home', label: '住 · 空间居所', icon: 'home' as const, page: 'home' },
-  { to: '/travel', label: '行 · 行程调度', icon: 'travel' as const, page: 'travel' },
-  { to: '/spending', label: '支 · 节度用度', icon: 'spending' as const, page: 'spending' },
+  { to: '/', label: '今日概览', icon: 'overview' as const, page: 'overview' },
+  { to: '/wardrobe', label: '衣橱', icon: 'wardrobe' as const, page: 'wardrobe' },
+  { to: '/diet', label: '饮食', icon: 'diet' as const, page: 'diet' },
+  { to: '/home', label: '家居', icon: 'home' as const, page: 'home' },
+  { to: '/travel', label: '出行', icon: 'travel' as const, page: 'travel' },
+  { to: '/spending', label: '支出统计', icon: 'spending' as const, page: 'spending' },
+  { to: '/settings', label: '设置', icon: 'settings' as const, page: 'settings' },
 ];
 
 export function Shell() {
@@ -38,17 +30,14 @@ export function Shell() {
   const [aiSeed, setAiSeed] = useState('');
   const [omni, setOmni] = useState('');
   const [omniOpen, setOmniOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('ai_life_theme') || 'chinese-ink');
-  const title = NAV.find((item) => item.to === location.pathname)?.label ?? '设置';
+  const title = NAV.find((item) => item.to === location.pathname)?.label ?? '今日概览';
   const page = location.pathname === '/' ? 'overview' : location.pathname.slice(1);
-  const kcal = store.meals.reduce((sum, meal) => sum + meal.kcal, 0);
 
   useEffect(() => {
     document.title = `${title} · AI Life`;
-    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.theme = 'chinese-ink';
     document.documentElement.dataset.page = page === 'settings' ? 'overview' : page;
-    localStorage.setItem('ai_life_theme', theme);
-  }, [page, theme, title]);
+  }, [page, title]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -73,21 +62,18 @@ export function Shell() {
     return all.filter((item) => `${item.title} ${item.meta} ${item.kind}`.toLowerCase().includes(q)).slice(0, 6);
   }, [omni, store.devices, store.items, store.recipes, store.trips]);
 
-  const counts: Record<string, string> = {
-    wardrobe: `${store.items.length} 件`,
-    diet: `${kcal} 千卡`,
-    home: store.devices.some((device) => device.offline) ? '有异常' : '安适',
-    travel: store.trips.find((trip) => trip.status === '即将开始')?.title ?? '无行程',
-    spending: '本月',
-  };
-
-  function sendOmni() {
-    const value = omni.trim();
-    if (!value) return;
-    setAiSeed(value);
+  function openArrange() {
+    setAiSeed('');
     setAiOpen(true);
-    setOmni('');
+  }
+
+  function goFirstHit() {
+    const hit = hits[0];
+    if (!hit) return;
     setOmniOpen(false);
+    setOmni('');
+    setNavOpen(false);
+    navigate(hit.href);
   }
 
   return (
@@ -97,51 +83,36 @@ export function Shell() {
         <div>
           <div className="brand">
             <span className="seal-mark">生</span>
-            <div>
-              <div className="brand-name">AI·生活管家 <span className="seal">貳.零</span></div>
-              <p>格物致知 · 智享生活</p>
-            </div>
+            <div className="brand-name">AI 生活管家</div>
           </div>
           <nav className="nav-block">
-            <div className="nav-label">· 日用居止 ·</div>
             {NAV.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')} onClick={() => setNavOpen(false)}>
                 <span className="left"><Icon name={item.icon} />{item.label}</span>
-                {item.page === 'overview' ? <i className="dot" /> : <span className="nav-count">{counts[item.page]}</span>}
               </NavLink>
             ))}
           </nav>
-          <div className="side-meta">
-            <div><span>时序节令</span><strong>{todayLabel()}</strong></div>
-            <div><span>地理天候</span><strong>沪上 · 14° 细雨</strong></div>
-            <div><span>物联中枢</span><strong>{store.devices.filter((device) => !device.offline).length} 台在线</strong></div>
-          </div>
         </div>
         <div className="user">
           <div className="user-id">
             <span className="avatar">星</span>
-            <div>
-              <strong>星宇的阁子</strong>
-              <small>数据自守 · 本地无越</small>
-            </div>
+            <strong>星宇</strong>
           </div>
-          <NavLink to="/settings" className="priv">设置</NavLink>
         </div>
       </aside>
       <div className="workspace">
         <header className="top">
           <button type="button" className="nav-toggle" aria-label="打开菜单" onClick={() => setNavOpen(true)}><Icon name="menu" /></button>
-          <form className="omni" onSubmit={(event) => { event.preventDefault(); sendOmni(); }}>
-            <span className="spark"><Icon name="spark" /></span>
+          <form className="omni" onSubmit={(event) => { event.preventDefault(); goFirstHit(); }}>
+            <span className="spark"><Icon name="search" /></span>
             <input
               id="omniInput"
-              data-testid="open-ai"
-              placeholder="向管家发付，例：周五飞往燕京出差三日，请备行囊"
+              placeholder="搜索衣橱、食谱、设备或行程…"
               value={omni}
               onChange={(event) => { setOmni(event.target.value); setOmniOpen(true); }}
               onFocus={() => setOmniOpen(true)}
             />
-            <kbd>回车发付</kbd>
+            <kbd>⌘K</kbd>
             {omniOpen && hits.length > 0 ? (
               <div className="hits-pop">
                 {hits.map((hit) => (
@@ -154,14 +125,7 @@ export function Shell() {
             ) : null}
           </form>
           <div className="top-tools">
-            <label className="theme-switch">
-              <span>意境风格</span>
-              <select aria-label="意境风格" value={theme} onChange={(event) => setTheme(event.target.value)}>
-                {THEMES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              </select>
-            </label>
-            <button type="button" className="quick" onClick={() => navigate('/wardrobe')}><Icon name="wardrobe" /><span>随手录衣</span></button>
-            <button type="button" className="quick" data-testid="open-search" onClick={() => navigate('/spending')}><Icon name="spending" /><span>入账理度</span></button>
+            <button type="button" className="quick" data-testid="open-ai" onClick={openArrange}><Icon name="spark" /><span>今天想安排什么？</span></button>
           </div>
         </header>
         <div className="viewport">
@@ -246,7 +210,7 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
   }, []);
 
   return (
-    <Modal title="AI 管家领命 · 跨域协同已拟定" onClose={onClose}>
+    <Modal title="今天想安排什么？" onClose={onClose}>
       <form onSubmit={(event) => { event.preventDefault(); submit(text); }}>
         <textarea rows={3} autoFocus placeholder="比如：出差前帮我准备一下" value={text} onChange={(event) => setText(event.target.value)} />
         <div className="pills" style={{ marginTop: 10 }}>

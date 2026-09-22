@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { monthExpenses, share, sumAmount, todayLabel, yuan } from '../format';
+import { monthExpenses, share, sumAmount, yuan } from '../format';
 import { useStore } from '../store';
 import { SPEND_TAGS } from '../types';
 export function OverviewPage() {
@@ -14,7 +14,6 @@ export function OverviewPage() {
   const online = store.devices.filter((device) => !device.offline).length;
   const abnormal = store.alerts.filter((alert) => !alert.handled && alert.level === '高').length + store.devices.filter((device) => device.offline).length;
   const upcoming = store.trips.find((trip) => trip.status === '即将开始') ?? store.trips[0];
-  const recent = [...month].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
 
   const tips = [
     {
@@ -49,42 +48,9 @@ export function OverviewPage() {
 
   return (
     <>
-      <article className="card hero">
-        <div className="page-head">
-          <div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-              <span className="seal">跨域协同 · 行动备忘</span>
-              <span className="muted">{todayLabel()} · 沪上细雨</span>
-            </div>
-            <h1 className="display" style={{ fontSize: 28 }}>今日日用综览：微雨通勤轻装、午宜清淡，晚间有北上燕京之行</h1>
-          </div>
-          <button type="button" className="btn" data-testid="adopt-cross" disabled={store.adoptedTips.includes('cross')} onClick={store.executeCrossPlan}>
-            {store.adoptedTips.includes('cross') ? '已应允' : '一键应允全部谋划'}
-          </button>
-        </div>
-        <div className="matrix">
-          <div className="inner">
-            <strong style={{ color: 'var(--tag-cloth)' }}>衣 · 顺应天候</strong>
-            <p>{store.suggestion.title}</p>
-            <p className="muted">{store.suggestion.reason}</p>
-          </div>
-          <div className="inner">
-            <strong style={{ color: 'var(--tag-food)' }}>食 · 调摄节度</strong>
-            <p>{kcal} / {store.targets.kcal || '—'} kcal</p>
-            <p className="muted">{gap > 0 ? `蛋白质还差 ${gap} g` : '蛋白质已达标'}</p>
-          </div>
-          <div className="inner">
-            <strong style={{ color: 'var(--tag-home)' }}>住 · 庭轩安适</strong>
-            <p>{online} 台在线</p>
-            <p className="muted">{abnormal > 0 ? `${abnormal} 项异常` : '安居无虞'}</p>
-          </div>
-          <div className="inner">
-            <strong style={{ color: 'var(--tag-travel)' }}>行 · 舟车行程</strong>
-            <p>{upcoming?.title ?? '暂无行程'}</p>
-            <p className="muted">{upcoming?.dateLabel ?? '可以新建一趟'}</p>
-          </div>
-        </div>
-      </article>
+      <header className="page-head">
+        <h1 className="display" style={{ fontSize: 32 }}>今日概览</h1>
+      </header>
       <section className="grid-4">
         <button type="button" className="card stat link-card" onClick={() => navigate('/wardrobe')}>
           <span>衣橱</span>
@@ -141,19 +107,6 @@ export function OverviewPage() {
         </article>
       </section>
 
-      <article className="card">
-        <h2>最近流水</h2>
-        {recent.length === 0 ? <p className="empty">这个月还没有流水。</p> : recent.map((item) => (
-          <button type="button" className="txn" key={item.id} onClick={() => navigate(`/spending?tag=${encodeURIComponent(item.tag)}`)}>
-            <span className={`tag tag-${item.tag}`}>{item.tag}</span>
-            <div>
-              <strong>{item.merchant}</strong>
-              <p className="muted">{item.date.slice(5)} · {item.note}</p>
-            </div>
-            <strong>{yuan(item.amount)}</strong>
-          </button>
-        ))}
-      </article>
     </>
   );
 }

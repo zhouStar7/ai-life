@@ -549,7 +549,7 @@ html[data-page="spending"] .tag-行 { background: rgba(96, 165, 250, 0.12); colo
   .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 25; border: 0; }
   .nav-toggle { display: inline-flex; }
   .top, .viewport { padding-left: 16px; padding-right: 16px; }
-  .top-tools .quick span, .theme-switch span { display: none; }
+  .quick span { display: inline; }
   .form-grid { grid-template-columns: 1fr; }
   .page-head { flex-direction: column; align-items: flex-start; }
   .display { font-size: 36px; }
