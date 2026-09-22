@@ -10,6 +10,7 @@ AI 生活管家工作台：从**衣食住行**四个维度管理日常生活，�
 docs/                 需求与设计规范、可行性分析报告
 designs/              静态原型稿（PNG）
 ai-life-designs/      多视觉风格高保真交互原型（HTML + Tailwind + Lucide）
+web/                  可运行演示（今日概览与衣食住行支）
 ```
 
 ## 产品导航
