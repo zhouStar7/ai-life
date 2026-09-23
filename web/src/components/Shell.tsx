@@ -9,6 +9,7 @@ import { SpendingPage } from '../pages/Spending';
 import { TravelPage } from '../pages/Travel';
 import { WardrobePage } from '../pages/Wardrobe';
 import { Icon } from './Icon';
+import { arrange } from '../api/client';
 import { Modal } from './ui';
 
 const NAV = [
@@ -152,15 +153,33 @@ export function Shell() {
 function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void; onOpen: (href: string) => void }) {
   const store = useStore();
   const [text, setText] = useState(seed);
-  const [plan, setPlan] = useState<{ title: string; lines: string[]; href: string; label: string } | null>(null);
+  const [plan, setPlan] = useState<{ title: string; lines: string[]; href: string; label: string; actions?: unknown[]; key?: string } | null>(null);
   const protein = store.meals.reduce((sum, meal) => sum + meal.protein, 0);
   const gap = Math.max(0, store.targets.protein - protein);
 
-  function submit(raw: string) {
+  async function submit(raw: string) {
     const value = raw.trim();
     if (!value) return;
     setText(value);
-    if (/穿|衣|搭配/.test(value)) {
+    try {
+      const result = await arrange(value);
+      setPlan({
+        title: result.title,
+        lines: result.lines,
+        href: result.href,
+        actions: result.actions,
+        key: result.key,
+        label: result.adopted ? '已采纳' : result.actions.length > 0 ? '采纳' : '打开',
+      });
+      return;
+    } catch {
+      localPlan(value);
+    }
+  }
+
+  function localPlan(value: string) {
+    const filterTitle = store.alerts.find((alert) => alert.id === 'a-filter')?.title ?? '净水器滤芯该换了';
+    if (/穿|衣|搭配/.test(value) && !/下雨|降温|交流会|出差/.test(value)) {
       setPlan({ title: '穿搭可以这么定', lines: [store.suggestion.title, store.suggestion.reason], href: '/wardrobe', label: '去衣橱采纳' });
       return;
     }
@@ -169,7 +188,7 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
       return;
     }
     if (/家|灯|空调|滤芯|场景/.test(value)) {
-      setPlan({ title: '家里先处理这些', lines: ['净水器滤芯剩余 8%。', '出门前可以切到「离家」。'], href: '/home', label: '去家居' });
+      setPlan({ title: '家里先处理这些', lines: [filterTitle, '出门前可以切到「离家」。'], href: '/home', label: '去家居' });
       return;
     }
     if (/下雨|降温|交流会|出差|北京|哈尔滨|燕京/.test(value)) {
@@ -232,7 +251,8 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
             style={{ marginTop: 10 }}
             disabled={plan.label === '已采纳'}
             onClick={() => {
-              if (plan.label === '一键采纳') store.executeCrossPlan();
+              if (plan.actions && plan.actions.length > 0 && plan.label === '采纳') store.adoptActions(plan.actions, plan.key);
+              else if (plan.label === '一键采纳') store.executeCrossPlan();
               onOpen(plan.href);
             }}
           >{plan.label}</button>

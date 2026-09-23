@@ -1,5 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createContext, useContext } from 'react';
+import { api } from './api/client';
+import { loadSnapshot, saveSnapshot } from './api/snapshot';
 import { itemNames, uid } from './format';
 import {
   SEED_ALERTS,
@@ -83,8 +85,36 @@ interface StoreValue {
   adoptFilterTip: () => void;
   executeCrossPlan: () => void;
   markTip: (id: string) => void;
+  adoptActions: (actions: unknown[], key?: string) => void;
+  setModel: (input: { baseUrl: string; model: string; apiKey: string }) => void;
+  weatherLabel: string;
+  online: boolean;
+  model: { configured: boolean; baseUrl: string; model: string };
   suggestion: { title: string; reason: string; itemIds: string[] };
 }
+
+type RemoteSnapshot = {
+  items: WardrobeItem[];
+  outfits: Outfit[];
+  meals: Meal[];
+  recipes: Recipe[];
+  targets: NutritionTarget;
+  devices: Device[];
+  alerts: HomeAlert[];
+  trips: Trip[];
+  expenses: Expense[];
+  budgets: Budgets;
+  notices: NoticePrefs;
+  suggestionIndex: number;
+  weatherOn: boolean;
+  weatherLabel: string;
+  outfitAdopted: boolean;
+  activeOutfitId: string | null;
+  activeScene: SceneName | null;
+  activeTripId: string;
+  adoptedTips: string[];
+  model: { configured: boolean; baseUrl: string; model: string };
+};
 
 const StoreContext = createContext<StoreValue | null>(null);
 
@@ -126,7 +156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [outfitAdopted, setOutfitAdopted] = useState(false);
   const [activeOutfitId, setActiveOutfitId] = useState<string | null>(null);
   const [meals, setMeals] = useState<Meal[]>(SEED_MEALS);
-  const [recipes] = useState<Recipe[]>(SEED_RECIPES);
+  const [recipes, setRecipes] = useState<Recipe[]>(SEED_RECIPES);
   const [targets, setTargetsState] = useState<NutritionTarget>(SEED_TARGETS);
   const [devices, setDevices] = useState<Device[]>(cloneDevices);
   const [alerts, setAlerts] = useState<HomeAlert[]>(SEED_ALERTS);
@@ -138,6 +168,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<NoticePrefs>(SEED_NOTICES);
   const [adoptedTips, setAdoptedTips] = useState<string[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [weatherLabel, setWeatherLabel] = useState('22°C 多云');
+  const [online, setOnline] = useState(false);
+  const [model, setModelState] = useState({ configured: false, baseUrl: '', model: '' });
+  const sourceRef = useRef<'api' | 'memory'>('memory');
+
+  function applyRemote(snapshot: RemoteSnapshot) {
+    setItems(snapshot.items);
+    setOutfits(snapshot.outfits);
+    setMeals(snapshot.meals);
+    setRecipes(snapshot.recipes);
+    setTargetsState(snapshot.targets);
+    setDevices(snapshot.devices);
+    setAlerts(snapshot.alerts);
+    setTrips(snapshot.trips);
+    setExpenses(snapshot.expenses);
+    setBudgetsState(snapshot.budgets);
+    setNotices(snapshot.notices);
+    setSuggestionIndex(snapshot.suggestionIndex);
+    setWeatherOn(snapshot.weatherOn);
+    setWeatherLabel(snapshot.weatherLabel || '22°C 多云');
+    setOutfitAdopted(snapshot.outfitAdopted);
+    setActiveOutfitId(snapshot.activeOutfitId);
+    setActiveScene(snapshot.activeScene);
+    setActiveTripId(snapshot.activeTripId || 't-bj');
+    setAdoptedTips(snapshot.adoptedTips);
+    setModelState(snapshot.model);
+  }
+
+  useEffect(() => {
+    let cancel = false;
+    api<RemoteSnapshot>('/api/snapshot')
+      .then((snapshot) => {
+        if (cancel) return;
+        applyRemote(snapshot);
+        sourceRef.current = 'api';
+        setOnline(true);
+        void saveSnapshot(snapshot);
+      })
+      .catch(() => {
+        void loadSnapshot<RemoteSnapshot>().then((cached) => {
+          if (cancel || !cached) return;
+          applyRemote(cached);
+        });
+      });
+    return () => {
+      cancel = true;
+    };
+    // 启动时用本机库；库没开就留着种子。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function commit(path: string, init?: RequestInit) {
+    if (sourceRef.current !== 'api') return false;
+    try {
+      const body = await api<{ snapshot?: RemoteSnapshot } & RemoteSnapshot>(path, init);
+      const snapshot = body.snapshot ?? body;
+      applyRemote(snapshot);
+      void saveSnapshot(snapshot);
+      return true;
+    } catch {
+      sourceRef.current = 'memory';
+      setOnline(false);
+      return false;
+    }
+  }
 
   const suggestion = useMemo(() => {
     const pool = SUGGESTIONS.filter((item) => item.weather === weatherOn);
@@ -193,189 +288,394 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     adoptedTips,
     toasts,
     suggestion,
+    weatherLabel,
+    online,
+    model,
     addItem: (input) => {
-      setItems((current) => [{ ...input, id: uid('w'), wears: 0, createdAt: '2026-09-22' }, ...current]);
-      toast(`已加入「${input.name}」`);
+      void (async () => {
+        if (await commit('/api/items', { method: 'POST', body: JSON.stringify(input) })) {
+          toast(`已加入「${input.name}」`);
+          return;
+        }
+        setItems((current) => [{ ...input, id: uid('w'), wears: 0, createdAt: '2026-09-22' }, ...current]);
+        toast(`已加入「${input.name}」`);
+      })();
     },
     updateItem: (item) => {
-      setItems((current) => current.map((row) => (row.id === item.id ? item : row)));
-      toast('单品已更新');
+      void (async () => {
+        if (await commit(`/api/items/${item.id}`, { method: 'PATCH', body: JSON.stringify(item) })) {
+          toast('单品已更新');
+          return;
+        }
+        setItems((current) => current.map((row) => (row.id === item.id ? item : row)));
+        toast('单品已更新');
+      })();
     },
     removeItem: (id) => {
-      setItems((current) => current.filter((item) => item.id !== id));
-      toast('已从衣橱移除');
+      void (async () => {
+        if (await commit(`/api/items/${id}`, { method: 'DELETE' })) {
+          toast('已从衣橱移除');
+          return;
+        }
+        setItems((current) => current.filter((item) => item.id !== id));
+        toast('已从衣橱移除');
+      })();
     },
     toggleFavorite: (id) => {
-      setOutfits((current) => current.map((outfit) => (outfit.id === id ? { ...outfit, favorite: !outfit.favorite } : outfit)));
+      void (async () => {
+        if (await commit(`/api/outfits/${id}/favorite`, { method: 'POST' })) return;
+        setOutfits((current) => current.map((outfit) => (outfit.id === id ? { ...outfit, favorite: !outfit.favorite } : outfit)));
+      })();
     },
     applyOutfit: (id) => {
       const outfit = outfits.find((item) => item.id === id);
       if (!outfit) return;
-      bumpWears(outfit.itemIds);
-      setActiveOutfitId(id);
-      toast(`已套用「${outfit.name}」`);
+      void (async () => {
+        if (await commit(`/api/outfits/${id}/apply`, { method: 'POST' })) {
+          toast(`已套用「${outfit.name}」`);
+          return;
+        }
+        bumpWears(outfit.itemIds);
+        setActiveOutfitId(id);
+        toast(`已套用「${outfit.name}」`);
+      })();
     },
     saveSuggestion: () => {
       if (suggestion.itemIds.length === 0) {
         toast('先添加单品，再保存穿搭');
         return;
       }
-      const exists = outfits.some((outfit) => outfit.itemIds.join() === suggestion.itemIds.join());
-      if (exists) {
-        toast('这套已经在穿搭集里');
-        return;
-      }
-      setOutfits((current) => [
-        { id: uid('o'), name: `今日推荐 ${current.length + 1}`, itemIds: suggestion.itemIds, favorite: false },
-        ...current,
-      ]);
-      toast('已保存到穿搭集');
+      void (async () => {
+        if (sourceRef.current === 'api') {
+          try {
+            const body = await api<{ snapshot: RemoteSnapshot; duplicate?: boolean }>('/api/outfits', {
+              method: 'POST',
+              body: JSON.stringify({ itemIds: suggestion.itemIds }),
+            });
+            applyRemote(body.snapshot);
+            void saveSnapshot(body.snapshot);
+            toast(body.duplicate ? '这套已经在穿搭集里' : '已保存到穿搭集');
+            return;
+          } catch {
+            sourceRef.current = 'memory';
+            setOnline(false);
+          }
+        }
+        const exists = outfits.some((outfit) => outfit.itemIds.join() === suggestion.itemIds.join());
+        if (exists) {
+          toast('这套已经在穿搭集里');
+          return;
+        }
+        setOutfits((current) => [
+          { id: uid('o'), name: `今日推荐 ${current.length + 1}`, itemIds: suggestion.itemIds, favorite: false },
+          ...current,
+        ]);
+        toast('已保存到穿搭集');
+      })();
     },
     adoptOutfitSuggestion: () => {
       if (outfitAdopted || suggestion.itemIds.length === 0) return;
-      bumpWears(suggestion.itemIds);
-      setOutfitAdopted(true);
-      markTip('outfit');
-      toast('已采纳今日穿搭');
+      void (async () => {
+        if (await commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'outfit' }) })) {
+          toast('已采纳今日穿搭');
+          return;
+        }
+        bumpWears(suggestion.itemIds);
+        setOutfitAdopted(true);
+        markTip('outfit');
+        toast('已采纳今日穿搭');
+      })();
     },
     refreshSuggestion: () => {
-      setSuggestionIndex((index) => index + 1);
-      setOutfitAdopted(false);
-      toast('换了一套建议');
+      void (async () => {
+        if (await commit('/api/wardrobe/suggestion/refresh', { method: 'POST' })) {
+          toast('换了一套建议');
+          return;
+        }
+        setSuggestionIndex((index) => index + 1);
+        setOutfitAdopted(false);
+        toast('换了一套建议');
+      })();
     },
     toggleWeather: () => {
-      setWeatherOn((on) => !on);
-      setSuggestionIndex(0);
-      setOutfitAdopted(false);
+      void (async () => {
+        if (await commit('/api/session/weather', { method: 'POST' })) return;
+        setWeatherOn((on) => !on);
+        setWeatherLabel((label) => (label === '天气未知' ? '22°C 多云' : '天气未知'));
+        setSuggestionIndex(0);
+        setOutfitAdopted(false);
+      })();
     },
     addMeal: (input) => {
-      setMeals((current) => [...current, { ...input, id: uid('m') }]);
-      toast(`已记下${input.slot}`);
+      void (async () => {
+        if (await commit('/api/meals', { method: 'POST', body: JSON.stringify(input) })) {
+          toast(`已记下${input.slot}`);
+          return;
+        }
+        setMeals((current) => [...current, { ...input, id: uid('m') }]);
+        toast(`已记下${input.slot}`);
+      })();
     },
     updateMeal: (meal) => {
-      setMeals((current) => current.map((row) => (row.id === meal.id ? meal : row)));
-      toast('餐次已更新');
+      void (async () => {
+        if (await commit(`/api/meals/${meal.id}`, { method: 'PATCH', body: JSON.stringify(meal) })) {
+          toast('餐次已更新');
+          return;
+        }
+        setMeals((current) => current.map((row) => (row.id === meal.id ? meal : row)));
+        toast('餐次已更新');
+      })();
     },
     removeMeal: (id) => {
-      setMeals((current) => current.filter((meal) => meal.id !== id));
-      toast('已删除这条餐次');
+      void (async () => {
+        if (await commit(`/api/meals/${id}`, { method: 'DELETE' })) {
+          toast('已删除这条餐次');
+          return;
+        }
+        setMeals((current) => current.filter((meal) => meal.id !== id));
+        toast('已删除这条餐次');
+      })();
     },
     applyRecipe: (id) => {
       const recipe = recipes.find((item) => item.id === id);
       if (!recipe) return;
-      const now = new Date();
-      const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      setMeals((current) => [
-        ...current,
-        {
-          id: uid('m'),
-          slot: recipe.slot,
-          name: recipe.name,
-          time,
-          kcal: recipe.kcal,
-          protein: recipe.protein,
-          carb: recipe.carb,
-          fat: recipe.fat,
-        },
-      ]);
-      toast(`已把「${recipe.name}」加入${recipe.slot}`);
+      void (async () => {
+        if (await commit(`/api/recipes/${id}/apply`, { method: 'POST' })) {
+          toast(`已把「${recipe.name}」加入${recipe.slot}`);
+          return;
+        }
+        const now = new Date();
+        const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        setMeals((current) => [
+          ...current,
+          { id: uid('m'), slot: recipe.slot, name: recipe.name, time, kcal: recipe.kcal, protein: recipe.protein, carb: recipe.carb, fat: recipe.fat },
+        ]);
+        toast(`已把「${recipe.name}」加入${recipe.slot}`);
+      })();
     },
     setTargets: (next) => {
-      setTargetsState(next);
-      toast(next.kcal > 0 ? '营养目标已更新' : '已清除营养目标');
+      void (async () => {
+        if (await commit('/api/nutrition-target', { method: 'PUT', body: JSON.stringify(next) })) {
+          toast(next.kcal > 0 ? '营养目标已更新' : '已清除营养目标');
+          return;
+        }
+        setTargetsState(next);
+        toast(next.kcal > 0 ? '营养目标已更新' : '已清除营养目标');
+      })();
     },
     toggleDevice: (id) => {
       const device = devices.find((item) => item.id === id);
       if (!device || device.offline) return;
-      setDevices((current) => current.map((item) => (item.id === id ? { ...item, on: !item.on } : item)));
+      void (async () => {
+        if (await commit(`/api/devices/${id}/toggle`, { method: 'POST' })) return;
+        setDevices((current) => current.map((item) => (item.id === id ? { ...item, on: !item.on } : item)));
+      })();
     },
     unbindDevice: (id) => {
-      setDevices((current) => current.filter((device) => device.id !== id));
-      toast('设备已解绑');
+      void (async () => {
+        if (await commit(`/api/devices/${id}`, { method: 'DELETE' })) {
+          toast('设备已解绑');
+          return;
+        }
+        setDevices((current) => current.filter((device) => device.id !== id));
+        toast('设备已解绑');
+      })();
     },
     bindSampleDevices: () => {
-      setDevices((current) => {
-        const ids = new Set(current.map((device) => device.id));
-        const missing = SEED_DEVICES.filter((device) => !ids.has(device.id)).map((device) => ({ ...device }));
-        return [...current, ...missing];
-      });
-      toast('已绑定演示设备');
+      void (async () => {
+        if (await commit('/api/devices/bind-sample', { method: 'POST' })) {
+          toast('已绑定演示设备');
+          return;
+        }
+        setDevices((current) => {
+          const ids = new Set(current.map((device) => device.id));
+          const missing = SEED_DEVICES.filter((device) => !ids.has(device.id)).map((device) => ({ ...device }));
+          return [...current, ...missing];
+        });
+        toast('已绑定演示设备');
+      })();
     },
-    applyScene: (name) => applyScene(name),
+    applyScene: (name) => {
+      void (async () => {
+        if (await commit(`/api/scenes/${encodeURIComponent(name)}`, { method: 'POST' })) {
+          toast(`已切换「${name}」`);
+          return;
+        }
+        applyScene(name);
+      })();
+    },
     handleAlert: (id) => {
-      setAlerts((current) => current.map((alert) => (alert.id === id ? { ...alert, handled: true } : alert)));
-      if (id === 'a-filter') markTip('filter');
-      toast('已记下，稍后处理');
+      void (async () => {
+        if (await commit(`/api/alerts/${id}/handle`, { method: 'POST' })) {
+          toast('已记下，稍后处理');
+          return;
+        }
+        setAlerts((current) => current.map((alert) => (alert.id === id ? { ...alert, handled: true } : alert)));
+        if (id === 'a-filter') markTip('filter');
+        toast('已记下，稍后处理');
+      })();
     },
-    selectTrip: setActiveTripId,
+    selectTrip: (id) => {
+      void (async () => {
+        if (await commit(`/api/trips/${id}/select`, { method: 'POST' })) return;
+        setActiveTripId(id);
+      })();
+    },
     togglePack: (tripId, packId) => {
-      setTrips((current) =>
-        current.map((trip) =>
-          trip.id === tripId
-            ? { ...trip, packing: trip.packing.map((item) => (item.id === packId ? { ...item, done: !item.done } : item)) }
-            : trip,
-        ),
-      );
+      void (async () => {
+        if (await commit(`/api/trips/${tripId}/packing/${packId}`, { method: 'POST' })) return;
+        setTrips((current) =>
+          current.map((trip) =>
+            trip.id === tripId
+              ? { ...trip, packing: trip.packing.map((item) => (item.id === packId ? { ...item, done: !item.done } : item)) }
+              : trip,
+          ),
+        );
+      })();
     },
     addTrip: (input) => {
-      const trip: Trip = {
-        id: uid('trip'),
-        ...input,
-        tickets: [],
-        timeline: [{ time: '待定', title: '出发', detail: '时间补上之后会出现在这里' }],
-        packing: ['身份证', '充电器', '换洗衣物'].map((text) => ({ id: uid('p'), text, done: false })),
-        prepAdopted: false,
-      };
-      setTrips((current) => [trip, ...current]);
-      setActiveTripId(trip.id);
-      toast('行程已创建');
+      void (async () => {
+        if (await commit('/api/trips', { method: 'POST', body: JSON.stringify(input) })) {
+          toast('行程已创建');
+          return;
+        }
+        const trip: Trip = {
+          id: uid('trip'),
+          ...input,
+          tickets: [],
+          timeline: [{ time: '待定', title: '出发', detail: '时间补上之后会出现在这里' }],
+          packing: ['身份证', '充电器', '换洗衣物'].map((text) => ({ id: uid('p'), text, done: false })),
+          prepAdopted: false,
+        };
+        setTrips((current) => [trip, ...current]);
+        setActiveTripId(trip.id);
+        toast('行程已创建');
+      })();
     },
     removeTrip: (id) => {
-      const remaining = trips.filter((trip) => trip.id !== id);
-      setTrips(remaining);
-      setActiveTripId((selected) => (selected === id ? (remaining[0]?.id ?? '') : selected));
-      toast('行程已删除');
+      void (async () => {
+        if (await commit(`/api/trips/${id}`, { method: 'DELETE' })) {
+          toast('行程已删除');
+          return;
+        }
+        const remaining = trips.filter((trip) => trip.id !== id);
+        setTrips(remaining);
+        setActiveTripId((selected) => (selected === id ? (remaining[0]?.id ?? '') : selected));
+        toast('行程已删除');
+      })();
     },
     adoptPrep: (tripId) => {
       const trip = trips.find((item) => item.id === tripId);
       if (!trip || trip.prepAdopted) return;
-      setTrips((current) => current.map((item) => (item.id === tripId ? { ...item, prepAdopted: true } : item)));
-      applyScene('离家', true);
-      markTip('prep');
-      toast('已采纳准备包：穿搭沿用今日建议，离家场景已打开');
+      void (async () => {
+        if (await commit(`/api/trips/${tripId}/adopt-prep`, { method: 'POST' })) {
+          toast('已采纳准备包：穿搭沿用今日建议，离家场景已打开');
+          return;
+        }
+        setTrips((current) => current.map((item) => (item.id === tripId ? { ...item, prepAdopted: true } : item)));
+        applyScene('离家', true);
+        markTip('prep');
+        toast('已采纳准备包：穿搭沿用今日建议，离家场景已打开');
+      })();
     },
     addExpense: (input) => {
-      setExpenses((current) => [{ ...input, id: uid('e') }, ...current]);
-      toast('已记上一笔');
+      void (async () => {
+        if (await commit('/api/expenses', { method: 'POST', body: JSON.stringify(input) })) {
+          toast('已记上一笔');
+          return;
+        }
+        setExpenses((current) => [{ ...input, id: uid('e') }, ...current]);
+        toast('已记上一笔');
+      })();
     },
     removeExpense: (id) => {
-      setExpenses((current) => current.filter((item) => item.id !== id));
-      toast('已删除这条流水');
+      void (async () => {
+        if (await commit(`/api/expenses/${id}`, { method: 'DELETE' })) {
+          toast('已删除这条流水');
+          return;
+        }
+        setExpenses((current) => current.filter((item) => item.id !== id));
+        toast('已删除这条流水');
+      })();
     },
     setBudgets: (next) => {
-      setBudgetsState(next);
-      toast('预算已更新');
+      void (async () => {
+        if (await commit('/api/budgets', { method: 'PUT', body: JSON.stringify(next) })) {
+          toast('预算已更新');
+          return;
+        }
+        setBudgetsState(next);
+        toast('预算已更新');
+      })();
     },
     setNotice: (key, value) => {
-      setNotices((current) => ({ ...current, [key]: value }));
+      void (async () => {
+        if (await commit('/api/notices', { method: 'PUT', body: JSON.stringify({ [key]: value }) })) return;
+        setNotices((current) => ({ ...current, [key]: value }));
+      })();
+    },
+    setModel: (input) => {
+      void (async () => {
+        if (await commit('/api/model', { method: 'PUT', body: JSON.stringify(input) })) {
+          toast('模型连接已保存');
+          return;
+        }
+        toast('本地服务没开，模型地址还没写下');
+      })();
+    },
+    adoptActions: (actions, key) => {
+      void (async () => {
+        if (await commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key, actions }) })) {
+          toast(key === 'cross' ? '已按衣食住行支记下：风衣、清淡午餐、离家、北京行李和差旅账' : '已采纳');
+          return;
+        }
+        if (key === 'cross') {
+          setItems((current) => current.map((item) => (['w1', 'w2', 'w3'].includes(item.id) ? { ...item, wears: item.wears + 1 } : item)));
+          setSuggestionIndex(1);
+          setWeatherOn(true);
+          setOutfitAdopted(true);
+          markTip('cross');
+          toast('已按衣食住行支记下：风衣、清淡午餐、离家、北京行李和差旅账');
+        }
+      })();
     },
     adoptProteinTip: () => {
-      if (!adoptedTips.includes('protein') && !meals.some((meal) => meal.name === '鸡胸肉沙拉')) {
-        setMeals((current) => [
-          ...current,
-          { id: uid('m'), slot: '晚餐', name: '鸡胸肉沙拉', time: '18:30', kcal: 420, protein: 42, carb: 18, fat: 16 },
-        ]);
-      }
-      markTip('protein');
-      toast('已按建议补上鸡胸肉沙拉');
+      void (async () => {
+        if (await commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'protein' }) })) {
+          toast('已按建议补上鸡胸肉沙拉');
+          return;
+        }
+        if (!adoptedTips.includes('protein') && !meals.some((meal) => meal.name === '鸡胸肉沙拉')) {
+          setMeals((current) => [
+            ...current,
+            { id: uid('m'), slot: '晚餐', name: '鸡胸肉沙拉', time: '18:30', kcal: 420, protein: 42, carb: 18, fat: 16 },
+          ]);
+        }
+        markTip('protein');
+        toast('已按建议补上鸡胸肉沙拉');
+      })();
     },
     adoptFilterTip: () => {
-      setAlerts((current) => current.map((alert) => (alert.id === 'a-filter' ? { ...alert, handled: true } : alert)));
-      markTip('filter');
-      toast('已把滤芯更换记进待办');
+      void (async () => {
+        if (await commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'filter' }) })) {
+          toast('已把滤芯更换记进待办');
+          return;
+        }
+        setAlerts((current) => current.map((alert) => (alert.id === 'a-filter' ? { ...alert, handled: true } : alert)));
+        markTip('filter');
+        toast('已把滤芯更换记进待办');
+      })();
     },
     executeCrossPlan: () => {
       if (adoptedTips.includes('cross')) return;
+      if (sourceRef.current === 'api') {
+        void (async () => {
+          if (await commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'cross' }) })) {
+            toast('已按衣食住行支记下：风衣、清淡午餐、离家、北京行李和差旅账');
+          }
+        })();
+        return;
+      }
       setItems((current) => current.map((item) => (['w1', 'w2', 'w3'].includes(item.id) ? { ...item, wears: item.wears + 1 } : item)));
       setSuggestionIndex(1);
       setWeatherOn(true);
@@ -408,7 +708,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       markTip('cross');
       toast('已按衣食住行支记下：风衣、清淡午餐、离家、北京行李和差旅账');
     },
-    markTip,
+    markTip: (id) => {
+      void (async () => {
+        if (await commit('/api/session/tips', { method: 'POST', body: JSON.stringify({ id }) })) return;
+        markTip(id);
+      })();
+    },
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

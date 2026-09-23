@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id        String @id
+  name      String
+  modelBase String @default("")
+  modelName String @default("")
+  modelKey  String @default("")
+}
+
+model SessionState {
+  id              String  @id
+  suggestionIndex Int     @default(0)
+  weatherOn       Boolean @default(true)
+  weatherLabel    String  @default("22°C 多云")
+  outfitAdopted   Boolean @default(false)
+  activeOutfitId  String?
+  activeScene     String?
+  activeTripId    String  @default("t-bj")
+  adoptedTips     String  @default("[]")
+}
+
+model WardrobeItem {
+  id        String @id
+  name      String
+  category  String
+  season    String
+  color     String
+  occasion  String
+  wears     Int
+  createdAt String
+}
+
+model Outfit {
+  id       String  @id
+  name     String
+  itemIds  String
+  favorite Boolean
+}
+
+model Meal {
+  id      String @id
+  slot    String
+  name    String
+  time    String
+  kcal    Int
+  protein Int
+  carb    Int
+  fat     Int
+}
+
+model Recipe {
+  id      String @id
+  name    String
+  tags    String
+  slot    String
+  kcal    Int
+  protein Int
+  carb    Int
+  fat     Int
+}
+
+model NutritionTarget {
+  id      String @id
+  kcal    Int
+  protein Int
+  carb    Int
+  fat     Int
+}
+
+model Device {
+  id         String  @id
+  name       String
+  room       String
+  kind       String
+  on         Boolean
+  paramLabel String?
+  paramValue String?
+  offline    Boolean @default(false)
+}
+
+model Alert {
+  id      String  @id
+  level   String
+  title   String
+  detail  String
+  handled Boolean @default(false)
+}
+
+model Trip {
+  id          String  @id
+  title       String
+  status      String
+  transport   String
+  dateLabel   String
+  tickets     String
+  timeline    String
+  packing     String
+  prepAdopted Boolean @default(false)
+}
+
+model Expense {
+  id       String @id
+  tag      String
+  amount   Int
+  date     String
+  merchant String
+  note     String
+}
+
+model Budget {
+  id    String @id
+  total Int
+  cloth Int
+  food  Int
+  home  Int
+  trip  Int
+}
+
+model Notice {
+  id     String  @id
+  outfit Boolean
+  budget Boolean
+  device Boolean
+}
