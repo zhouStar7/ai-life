@@ -7,6 +7,9 @@ import { yuan } from '../format';
 export function SettingsPage() {
   const store = useStore();
   const [draft, setDraft] = useState<Budgets>(store.budgets);
+  const [modelDraft, setModelDraft] = useState({ baseUrl: '', model: '', apiKey: '' });
+  const modelBase = modelDraft.baseUrl || store.model.baseUrl;
+  const modelName = modelDraft.model || store.model.model;
   const moduleSum = SPEND_TAGS.reduce((sum, tag) => sum + (Number(draft[tag]) || 0), 0);
 
   function setNumber(key: keyof Budgets, value: string) {
@@ -36,6 +39,32 @@ export function SettingsPage() {
           {moduleSum !== draft.total ? <p className="note" style={{ marginTop: 12 }}>四个模块合计 {yuan(moduleSum)}，月预算是 {yuan(draft.total)}。</p> : null}
           <div className="modal-actions">
             <button type="submit" className="btn" data-testid="save-budget">保存预算</button>
+          </div>
+        </form>
+      </article>
+      <article className="card">
+        <h2>模型连接</h2>
+        <p className="muted">地址留在本机。密钥保存后不会再显示。</p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            store.setModel({ baseUrl: modelBase, model: modelName, apiKey: modelDraft.apiKey });
+          }}
+          style={{ marginTop: 12 }}
+        >
+          <div className="form-grid">
+            <Field label="接口地址" wide>
+              <input placeholder="http://127.0.0.1:11434/v1" value={modelBase} onChange={(event) => setModelDraft({ ...modelDraft, baseUrl: event.target.value })} />
+            </Field>
+            <Field label="模型名称">
+              <input placeholder="llama3.1" value={modelName} onChange={(event) => setModelDraft({ ...modelDraft, model: event.target.value })} />
+            </Field>
+            <Field label="API Key">
+              <input type="password" autoComplete="off" placeholder={store.model.configured ? '已保存，留空则不改' : '本地模型可以留空'} value={modelDraft.apiKey} onChange={(event) => setModelDraft({ ...modelDraft, apiKey: event.target.value })} />
+            </Field>
+          </div>
+          <div className="modal-actions">
+            <button type="submit" className="btn">保存连接</button>
           </div>
         </form>
       </article>

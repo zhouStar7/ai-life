@@ -7,4 +7,6 @@ npm install
 npm run dev
 ```
 
-浏览器打开 http://localhost:1117 。数据只保存在当前页面会话中。
+浏览器打开 http://localhost:1117 。只跑这个命令时，数据只保存在当前页面会话中。
+
+同时在 `server/` 执行 `npm run dev` 后，页面改走本机 SQLite，刷新不会丢。模型地址在设置页填写。

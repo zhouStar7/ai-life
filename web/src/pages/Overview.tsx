@@ -14,11 +14,12 @@ export function OverviewPage() {
   const online = store.devices.filter((device) => !device.offline).length;
   const abnormal = store.alerts.filter((alert) => !alert.handled && alert.level === '高').length + store.devices.filter((device) => device.offline).length;
   const upcoming = store.trips.find((trip) => trip.status === '即将开始') ?? store.trips[0];
+  const filterAlert = store.alerts.find((alert) => alert.id === 'a-filter');
 
   const tips = [
     {
       id: 'outfit',
-      title: store.weatherOn ? '今天 22°C 多云，有一套通勤穿搭' : '天气暂时拿不到，先按通勤场合穿',
+      title: store.weatherOn ? `今天 ${store.weatherLabel}，有一套通勤穿搭` : '天气暂时拿不到，先按通勤场合穿',
       detail: store.suggestion.title,
       done: store.adoptedTips.includes('outfit') || store.outfitAdopted,
       action: () => { store.adoptOutfitSuggestion(); navigate('/wardrobe'); },
@@ -32,8 +33,8 @@ export function OverviewPage() {
     },
     {
       id: 'filter',
-      title: '净水器滤芯剩余 8%',
-      detail: '更换大约 ¥298，处理前可以先比价。',
+      title: filterAlert?.title ?? '净水器滤芯该换了',
+      detail: filterAlert?.detail ?? '处理前可以先比价。',
       done: store.adoptedTips.includes('filter') || store.alerts.find((alert) => alert.id === 'a-filter')?.handled === true,
       action: () => { store.adoptFilterTip(); navigate('/home'); },
     },

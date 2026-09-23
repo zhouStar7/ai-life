@@ -11,6 +11,7 @@ docs/                 需求与设计规范、可行性分析报告
 designs/              静态原型稿（PNG）
 ai-life-designs/      多视觉风格高保真交互原型（HTML + Tailwind + Lucide）
 web/                  可运行演示（今日概览与衣食住行支）
+server/               本机接口与 SQLite（阶段一，可选）
 ```
 
 ## 产品导航
@@ -59,7 +60,17 @@ npm install
 npm run dev
 ```
 
-打开 http://localhost:1117 。顶栏搜索支持 ⌘K / Ctrl+K。
+打开 http://localhost:1117 。顶栏搜索支持 ⌘K / Ctrl+K。只开这个命令时，数据仍只留在当前页面会话里。
+
+要让刷新后数据还在，并接上本机模型，另开一个终端：
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+接口在 http://127.0.0.1:8787 ，页面会把 `/api` 转到这里。设置里可以填写模型地址。模型没开时，示例句仍可以一键采纳。
 
 ## 优先级
 
