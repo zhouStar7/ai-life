@@ -70,9 +70,9 @@ export function SettingsPage() {
       </article>
       <article className="card">
         <h2>数据接入</h2>
-        <div className="toggle-row"><span>账单导入</span><span className="chip">未连接</span></div>
+        <div className="toggle-row"><span>账单导入</span><span className="chip">CSV / 截图</span></div>
         <div className="toggle-row"><span>智能家居</span><span className="chip">演示数据</span></div>
-        <p className="muted">真实账单和设备对接不在这一期。</p>
+        <p className="muted">支出统计可以导入 CSV，或用已连接的模型读账单截图。智能家居仍是演示数据。</p>
       </article>
     </div>
   );

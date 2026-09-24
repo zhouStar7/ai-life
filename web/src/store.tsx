@@ -20,6 +20,8 @@ import {
 import type {
   Budgets,
   Device,
+  BillDraft,
+  ClothingDraft,
   Expense,
   HomeAlert,
   Meal,
@@ -54,6 +56,8 @@ interface StoreValue {
   adoptedTips: string[];
   toasts: Toast[];
   addItem: (input: Omit<WardrobeItem, 'id' | 'wears' | 'createdAt'>) => void;
+  addItems: (inputs: ClothingDraft[]) => void;
+  recognizeClothing: (image: string) => Promise<ClothingDraft | null>;
   updateItem: (item: WardrobeItem) => void;
   removeItem: (id: string) => void;
   toggleFavorite: (id: string) => void;
@@ -78,6 +82,8 @@ interface StoreValue {
   removeTrip: (id: string) => void;
   adoptPrep: (tripId: string) => void;
   addExpense: (input: Omit<Expense, 'id'>) => void;
+  previewBills: (input: { csv?: string; image?: string }) => Promise<BillDraft[] | null>;
+  importExpenses: (rows: BillDraft[]) => void;
   removeExpense: (id: string) => void;
   setBudgets: (budgets: Budgets) => void;
   setNotice: (key: keyof NoticePrefs, value: boolean) => void;
@@ -300,6 +306,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setItems((current) => [{ ...input, id: uid('w'), wears: 0, createdAt: '2026-09-22' }, ...current]);
         toast(`已加入「${input.name}」`);
       })();
+    },
+    addItems: (inputs) => {
+      if (inputs.length === 0) return;
+      void (async () => {
+        if (sourceRef.current === 'api') {
+          try {
+            const body = await api<{ snapshot: RemoteSnapshot }>('/api/items/batch', {
+              method: 'POST',
+              body: JSON.stringify({ items: inputs }),
+            });
+            applyRemote(body.snapshot);
+            void saveSnapshot(body.snapshot);
+            toast(inputs.length === 1 ? `已加入「${inputs[0].name}」` : `已加入 ${inputs.length} 件`);
+            return;
+          } catch {
+            sourceRef.current = 'memory';
+            setOnline(false);
+          }
+        }
+        setItems((current) => [
+          ...inputs.map((input) => ({ ...input, id: uid('w'), wears: 0, createdAt: '2026-09-22' })),
+          ...current,
+        ]);
+        toast(inputs.length === 1 ? `已加入「${inputs[0].name}」` : `已加入 ${inputs.length} 件`);
+      })();
+    },
+    recognizeClothing: async (image) => {
+      if (sourceRef.current !== 'api') {
+        toast('本地服务没开，照片还识别不了');
+        return null;
+      }
+      try {
+        return await api<ClothingDraft>('/api/wardrobe/recognize', { method: 'POST', body: JSON.stringify({ image }) });
+      } catch (error) {
+        const status = error instanceof Error ? error.message : '';
+        toast(status === '503' ? '先在设置里接上能看图的模型' : '这张照片没有识别出来');
+        return null;
+      }
     },
     updateItem: (item) => {
       void (async () => {
@@ -586,6 +630,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         setExpenses((current) => [{ ...input, id: uid('e') }, ...current]);
         toast('已记上一笔');
+      })();
+    },
+    previewBills: async (input) => {
+      if (sourceRef.current !== 'api') {
+        toast('本地服务没开，账单还导不进来');
+        return null;
+      }
+      try {
+        const body = await api<{ rows: BillDraft[] }>('/api/bills/preview', { method: 'POST', body: JSON.stringify(input) });
+        return body.rows;
+      } catch (error) {
+        const status = error instanceof Error ? error.message : '';
+        toast(status === '503' ? '先在设置里接上能看图的模型' : '这份账单没有读出来');
+        return null;
+      }
+    },
+    importExpenses: (rows) => {
+      const ready = rows.filter((row): row is BillDraft & { tag: NonNullable<BillDraft['tag']> } => Boolean(row.tag));
+      if (ready.length === 0) {
+        toast('先给每一笔选好衣食住行');
+        return;
+      }
+      void (async () => {
+        if (sourceRef.current === 'api') {
+          try {
+            const body = await api<{ snapshot: RemoteSnapshot; imported: number }>('/api/bills/import', {
+              method: 'POST',
+              body: JSON.stringify({ rows: ready }),
+            });
+            applyRemote(body.snapshot);
+            void saveSnapshot(body.snapshot);
+            toast(`已导入 ${body.imported} 笔，环图和预算已更新`);
+            return;
+          } catch {
+            sourceRef.current = 'memory';
+            setOnline(false);
+          }
+        }
+        setExpenses((current) => [...ready.map((row) => ({ ...row, id: uid('e') })), ...current]);
+        toast(`已导入 ${ready.length} 笔，环图和预算已更新`);
       })();
     },
     removeExpense: (id) => {

@@ -1,12 +1,45 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
+import { recognizeClothing } from '../adapters/vision.js';
 import { uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
 import { pickSuggestion } from '../suggestion.js';
 
 const CATEGORIES = ['上衣', '裤装', '裙装', '外套', '鞋包'];
 
+function itemData(body: { name?: string; category?: string; color?: string; season?: string; occasion?: string }) {
+  return {
+    name: String(body.name).trim(),
+    category: body.category,
+    season: body.season || '四季',
+    color: String(body.color).trim(),
+    occasion: body.occasion || '通勤',
+  };
+}
+
+function validItem(body: { name?: string; category?: string; color?: string }) {
+  return Boolean(body.name && body.category && CATEGORIES.includes(body.category) && String(body.color).trim());
+}
+
 export function registerWardrobe(app: Hono, db: PrismaClient) {
+  app.post('/api/wardrobe/recognize', async (c) => {
+    const body = await c.req.json();
+    const image = typeof body.image === 'string' ? body.image : '';
+    if (!image.startsWith('data:image/')) return c.json({ error: 'invalid' }, 400);
+    const profile = await db.profile.findUniqueOrThrow({ where: { id: 'local' } });
+    if (!profile.modelBase) return c.json({ error: 'model_unavailable' }, 503);
+    try {
+      const draft = await recognizeClothing(
+        { baseUrl: profile.modelBase, apiKey: profile.modelKey, model: profile.modelName },
+        image,
+      );
+      if (!draft) return c.json({ error: 'unreadable' }, 422);
+      return c.json(draft);
+    } catch {
+      return c.json({ error: 'model_unavailable' }, 503);
+    }
+  });
+
   app.get('/api/items', async (c) => {
     const snap = await readSnapshot(db);
     return c.json(snap.items);
@@ -14,19 +47,24 @@ export function registerWardrobe(app: Hono, db: PrismaClient) {
 
   app.post('/api/items', async (c) => {
     const body = await c.req.json();
-    if (!body.name || !CATEGORIES.includes(body.category) || !body.color) return c.json({ error: 'invalid' }, 400);
+    if (!validItem(body)) return c.json({ error: 'invalid' }, 400);
+    const data = itemData(body);
     await db.wardrobeItem.create({
-      data: {
-        id: uid('w'),
-        name: String(body.name).trim(),
-        category: body.category,
-        season: body.season || '四季',
-        color: String(body.color).trim(),
-        occasion: body.occasion || '通勤',
-        wears: 0,
-        createdAt: '2026-09-22',
-      },
+      data: { id: uid('w'), ...data, category: data.category!, wears: 0, createdAt: '2026-09-22' },
     });
+    return c.json({ snapshot: await readSnapshot(db) });
+  });
+
+  app.post('/api/items/batch', async (c) => {
+    const body = await c.req.json();
+    const items: { name?: string; category?: string; color?: string; season?: string; occasion?: string }[] = Array.isArray(body.items) ? body.items : [];
+    if (items.length === 0 || items.some((item) => !validItem(item))) return c.json({ error: 'invalid' }, 400);
+    await db.$transaction(items.map((item) => {
+      const data = itemData(item);
+      return db.wardrobeItem.create({
+        data: { id: uid('w'), ...data, category: data.category!, wears: 0, createdAt: '2026-09-22' },
+      });
+    }));
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
