@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { monthExpenses, percentChange, PREV_MONTH_SPEND, share, sumAmount, yuan } from '../format';
 import { PAST_TREND, TAG_COLOR } from '../seed';
 import { useStore } from '../store';
-import { SPEND_TAGS, type SpendTag } from '../types';
+import { SPEND_TAGS, type BillDraft, type SpendTag } from '../types';
 import { Empty, Field, Modal, Progress } from '../components/ui';
 
 export function SpendingPage() {
@@ -13,6 +13,10 @@ export function SpendingPage() {
   const tagParam = params.get('tag');
   const tag = SPEND_TAGS.includes(tagParam as SpendTag) ? (tagParam as SpendTag) : '全部';
   const [adding, setAdding] = useState(false);
+  const [billRows, setBillRows] = useState<BillDraft[] | null>(null);
+  const [readingBill, setReadingBill] = useState(false);
+  const csvRef = useRef<HTMLInputElement>(null);
+  const shotRef = useRef<HTMLInputElement>(null);
   const month = monthExpenses(store.expenses);
   const total = sumAmount(month);
   const filtered = tag === '全部' ? month : monthExpenses(store.expenses, tag);
@@ -23,6 +27,19 @@ export function SpendingPage() {
   const gradient = donut(parts.map((part) => ({ color: TAG_COLOR[part.tag], value: part.amount })));
   const trend = [...PAST_TREND, { label: '9月', amount: total }];
   const peak = Math.max(...trend.map((item) => item.amount), 1);
+
+  async function onBillFile(file: File | undefined, kind: 'csv' | 'image') {
+    if (!file) return;
+    setReadingBill(true);
+    const payload = kind === 'csv'
+      ? { csv: await readBill(file, 'text') }
+      : { image: await readBill(file, 'data') };
+    const rows = await store.previewBills(payload);
+    setReadingBill(false);
+    if (csvRef.current) csvRef.current.value = '';
+    if (shotRef.current) shotRef.current.value = '';
+    if (rows) setBillRows(rows);
+  }
 
   function selectTag(next: '全部' | SpendTag) {
     if (next === '全部') setParams({});
@@ -42,7 +59,12 @@ export function SpendingPage() {
           <h1 className="display" style={{ fontSize: 32 }}>支出统计</h1>
           <p className="muted">2026 年 9 月</p>
         </div>
-        <button type="button" className="btn" data-testid="add-expense" onClick={() => setAdding(true)}>记一笔</button>
+        <div className="row-actions">
+          <button type="button" className="btn-ghost" data-testid="import-bills" disabled={readingBill} onClick={() => { setBillRows([]); }}>
+            {readingBill ? '读取中…' : '导入账单'}
+          </button>
+          <button type="button" className="btn" data-testid="add-expense" onClick={() => setAdding(true)}>记一笔</button>
+        </div>
       </header>
       <section className="grid-4">
         <article className="card kpi"><span>本月总支出</span><strong>{yuan(total)}</strong></article>
@@ -153,7 +175,85 @@ export function SpendingPage() {
         })}
       </article>
       {adding ? <ExpenseModal onClose={() => setAdding(false)} /> : null}
+      {billRows ? (
+        <ImportModal
+          rows={billRows}
+          reading={readingBill}
+          onChange={setBillRows}
+          onCsv={() => csvRef.current?.click()}
+          onShot={() => shotRef.current?.click()}
+          onClose={() => setBillRows(null)}
+        />
+      ) : null}
+      <input ref={csvRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => { void onBillFile(event.target.files?.[0], 'csv'); }} />
+      <input ref={shotRef} hidden type="file" accept="image/*" onChange={(event) => { void onBillFile(event.target.files?.[0], 'image'); }} />
     </>
+  );
+}
+
+function readBill(file: File, kind: 'data' | 'text') {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error);
+    if (kind === 'data') reader.readAsDataURL(file);
+    else reader.readAsText(file);
+  });
+}
+
+function ImportModal({
+  rows,
+  reading,
+  onChange,
+  onCsv,
+  onShot,
+  onClose,
+}: {
+  rows: BillDraft[];
+  reading: boolean;
+  onChange: (rows: BillDraft[]) => void;
+  onCsv: () => void;
+  onShot: () => void;
+  onClose: () => void;
+}) {
+  const store = useStore();
+  const ready = rows.length > 0 && rows.every((row) => row.tag);
+
+  function setTag(index: number, tag: string) {
+    onChange(rows.map((row, item) => (item === index ? { ...row, tag: tag ? tag as SpendTag : null } : row)));
+  }
+
+  return (
+    <Modal title="导入账单" onClose={onClose}>
+      <p className="muted">CSV 按衣食住行归类。截图交给已连接的模型。确认后计入本月环图和预算进度。</p>
+      <div className="row-actions" style={{ marginTop: 12 }}>
+        <button type="button" className="btn-ghost" disabled={reading} onClick={onCsv}>选择 CSV</button>
+        <button type="button" className="btn-ghost" disabled={reading} onClick={onShot}>选择截图</button>
+      </div>
+      {rows.length === 0 ? <p className="note" style={{ marginTop: 12 }}>{reading ? '正在读取…' : '还没有读到支出。收入行会跳过。'}</p> : rows.map((row, index) => (
+        <div className="txn" key={`${row.merchant}-${row.date}-${index}`}>
+          <select aria-label={`${row.merchant}的分类`} value={row.tag ?? ''} onChange={(event) => setTag(index, event.target.value)}>
+            <option value="">选择</option>
+            {SPEND_TAGS.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <div>
+            <strong>{row.merchant}</strong>
+            <p className="muted">{row.date.slice(5)} · {row.note}</p>
+          </div>
+          <strong>{yuan(row.amount)}</strong>
+        </div>
+      ))}
+      <div className="modal-actions">
+        <button type="button" className="btn-ghost" onClick={onClose}>取消</button>
+        <button
+          type="button"
+          className="btn"
+          data-testid="confirm-import"
+          disabled={!ready}
+          onClick={() => { store.importExpenses(rows); onClose(); }}
+        >确认导入</button>
+      </div>
+    </Modal>
   );
 }
 

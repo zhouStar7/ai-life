@@ -127,6 +127,22 @@ export interface Expense {
   note: string;
 }
 
+export interface BillDraft {
+  tag: SpendTag | null;
+  amount: number;
+  date: string;
+  merchant: string;
+  note: string;
+}
+
+export interface ClothingDraft {
+  name: string;
+  category: WardrobeCategory;
+  season: string;
+  color: string;
+  occasion: string;
+}
+
 export interface Budgets {
   total: number;
   衣: number;

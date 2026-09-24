@@ -1,6 +1,10 @@
 export type ModelConfig = { baseUrl: string; apiKey: string; model: string };
 
-export async function complete(config: ModelConfig, messages: { role: string; content: string }[]) {
+export type ChatContent =
+  | string
+  | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
+
+export async function complete(config: ModelConfig, messages: { role: string; content: ChatContent }[]) {
   const root = config.baseUrl.replace(/\/$/, '');
   const url = root.endsWith('/chat/completions') ? root : `${root}/chat/completions`;
   const response = await fetch(url, {
