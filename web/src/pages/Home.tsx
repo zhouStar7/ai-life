@@ -16,14 +16,17 @@ export function HomePage() {
       <header className="page-head">
         <div>
           <h1 className="display" style={{ fontSize: 32 }}>家居</h1>
-          <p className="muted">{online} 台在线 · {store.devices.length - online} 台离线{store.activeScene ? ` · 当前场景 ${store.activeScene}` : ''}</p>
+          <p className="muted">{store.home.connected ? 'Home Assistant 已连接' : '未连接 · 演示数据'} · {online} 台在线 · {store.devices.length - online} 台离线{store.activeScene ? ` · 当前场景 ${store.activeScene}` : ''}</p>
         </div>
-        <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : '家里状态正常'}</span>
+        <div className="row-actions">
+          <button type="button" className="btn-ghost" onClick={() => { void store.syncHome(); }}>同步设备</button>
+          <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : '家里状态正常'}</span>
+        </div>
       </header>
       {store.devices.length === 0 ? (
         <div className="stack">
           <div className="card">
-            <Empty title="还没有绑定设备" desc="演示数据可以一键绑上，真实设备对接以后再做。" action={<button type="button" className="btn" onClick={store.bindSampleDevices}>绑定演示设备</button>} />
+            <Empty title="还没有绑定设备" desc={store.home.connected ? 'Home Assistant 里没有可显示的灯、空调、窗帘或电视。' : '未连接时仍用演示数据。'} action={store.home.connected ? undefined : <button type="button" className="btn" onClick={store.bindSampleDevices}>绑定演示设备</button>} />
           </div>
           <SpendCard tag="住" label="本月住家支出" />
         </div>

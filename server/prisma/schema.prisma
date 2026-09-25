@@ -13,6 +13,8 @@ model Profile {
   modelBase String @default("")
   modelName String @default("")
   modelKey  String @default("")
+  haBase    String @default("")
+  haToken   String @default("")
 }
 
 model SessionState {
@@ -25,6 +27,8 @@ model SessionState {
   activeScene     String?
   activeTripId    String  @default("t-bj")
   adoptedTips     String  @default("[]")
+  haConnected     Boolean @default(false)
+  haScenes        String  @default("{}")
 }
 
 model WardrobeItem {
@@ -84,6 +88,7 @@ model Device {
   paramLabel String?
   paramValue String?
   offline    Boolean @default(false)
+  source     String  @default("demo")
 }
 
 model Alert {

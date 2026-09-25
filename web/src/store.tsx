@@ -24,6 +24,8 @@ import type {
   ClothingDraft,
   Expense,
   HomeAlert,
+  HomeLink,
+  ItineraryDraft,
   Meal,
   NoticePrefs,
   NutritionTarget,
@@ -32,6 +34,7 @@ import type {
   SceneName,
   Toast,
   Trip,
+  TripChain,
   WardrobeItem,
 } from './types';
 
@@ -93,9 +96,15 @@ interface StoreValue {
   markTip: (id: string) => void;
   adoptActions: (actions: unknown[], key?: string) => void;
   setModel: (input: { baseUrl: string; model: string; apiKey: string }) => void;
+  setHome: (input: { baseUrl: string; token: string }) => void;
+  syncHome: () => Promise<boolean>;
+  parseTrip: (text: string) => Promise<ItineraryDraft | null>;
+  importTrip: (draft: ItineraryDraft) => Promise<boolean>;
+  runChain: (tripId: string) => Promise<TripChain | null>;
   weatherLabel: string;
   online: boolean;
   model: { configured: boolean; baseUrl: string; model: string };
+  home: HomeLink;
   suggestion: { title: string; reason: string; itemIds: string[] };
 }
 
@@ -120,6 +129,7 @@ type RemoteSnapshot = {
   activeTripId: string;
   adoptedTips: string[];
   model: { configured: boolean; baseUrl: string; model: string };
+  home: HomeLink;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -177,6 +187,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [weatherLabel, setWeatherLabel] = useState('22°C 多云');
   const [online, setOnline] = useState(false);
   const [model, setModelState] = useState({ configured: false, baseUrl: '', model: '' });
+  const [home, setHomeState] = useState<HomeLink>({ configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false });
   const sourceRef = useRef<'api' | 'memory'>('memory');
 
   function applyRemote(snapshot: RemoteSnapshot) {
@@ -200,6 +211,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setActiveTripId(snapshot.activeTripId || 't-bj');
     setAdoptedTips(snapshot.adoptedTips);
     setModelState(snapshot.model);
+    setHomeState(snapshot.home ?? { configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false });
   }
 
   useEffect(() => {
@@ -297,6 +309,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     weatherLabel,
     online,
     model,
+    home,
     addItem: (input) => {
       void (async () => {
         if (await commit('/api/items', { method: 'POST', body: JSON.stringify(input) })) {
@@ -706,6 +719,76 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         toast('本地服务没开，模型地址还没写下');
       })();
+    },
+    setHome: (input) => {
+      void (async () => {
+        if (await commit('/api/home', { method: 'PUT', body: JSON.stringify(input) })) {
+          toast('家居地址已保存');
+          return;
+        }
+        toast('本地服务没开，家居令牌还没写下');
+      })();
+    },
+    syncHome: async () => {
+      if (sourceRef.current !== 'api') {
+        toast('本地服务没开，家居仍是演示数据');
+        return false;
+      }
+      try {
+        const body = await api<{ snapshot: RemoteSnapshot; error?: string }>('/api/home/sync', { method: 'POST' });
+        applyRemote(body.snapshot);
+        void saveSnapshot(body.snapshot);
+        toast(body.snapshot.home.connected ? '已从 Home Assistant 同步设备' : '未连接，仍显示演示数据');
+        return body.snapshot.home.connected;
+      } catch {
+        toast('未连接，仍显示演示数据');
+        return false;
+      }
+    },
+    parseTrip: async (text) => {
+      if (sourceRef.current !== 'api') {
+        toast('本地服务没开，行程还解析不了');
+        return null;
+      }
+      try {
+        const body = await api<{ draft: ItineraryDraft }>('/api/trips/parse', { method: 'POST', body: JSON.stringify({ text }) });
+        return body.draft;
+      } catch {
+        toast('这份短信或邮件没有读出行程');
+        return null;
+      }
+    },
+    importTrip: async (draft) => {
+      if (sourceRef.current !== 'api') {
+        toast('本地服务没开，行程还写不进去');
+        return false;
+      }
+      try {
+        const body = await api<{ snapshot: RemoteSnapshot }>('/api/trips/import', { method: 'POST', body: JSON.stringify({ draft }) });
+        applyRemote(body.snapshot);
+        void saveSnapshot(body.snapshot);
+        toast(`已写入「${draft.title}」`);
+        return true;
+      } catch {
+        toast('行程没有写进去');
+        return false;
+      }
+    },
+    runChain: async (tripId) => {
+      if (sourceRef.current !== 'api') {
+        toast('本地服务没开，这趟行程还串不起来');
+        return null;
+      }
+      try {
+        const body = await api<{ snapshot: RemoteSnapshot; chain: TripChain }>(`/api/trips/${tripId}/chain`, { method: 'POST' });
+        applyRemote(body.snapshot);
+        void saveSnapshot(body.snapshot);
+        toast(body.chain.scene.via === 'home-assistant' ? '已按行程串起，离家场景已交给 Home Assistant' : '已按行程串起，离家只记在本机');
+        return body.chain;
+      } catch {
+        toast('这趟行程没有串起来');
+        return null;
+      }
     },
     adoptActions: (actions, key) => {
       void (async () => {

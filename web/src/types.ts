@@ -70,6 +70,29 @@ export interface NutritionTarget {
   fat: number;
 }
 
+export interface HomeLink {
+  configured: boolean;
+  baseUrl: string;
+  connected: boolean;
+}
+
+export interface ItineraryDraft {
+  title: string;
+  status: TripStatus;
+  transport: string;
+  dateLabel: string;
+  tickets: TripTicket[];
+  timeline: TripNode[];
+  packing: string[];
+}
+
+export interface TripChain {
+  trip: { id: string; title: string };
+  outfit: { title: string; reason: string; itemIds: string[] };
+  scene: { name: string; via: 'local' | 'home-assistant' };
+  budget: { spent: number; budget: number; remain: number };
+}
+
 export interface Device {
   id: string;
   name: string;
