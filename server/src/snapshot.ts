@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { DEFAULT_HA_BASE } from './adapters/home-assistant.js';
 import { readJson } from './ids.js';
 import { PAST_TREND } from './seedData.js';
 
@@ -19,6 +20,11 @@ export async function readSnapshot(db: PrismaClient) {
     db.profile.findUniqueOrThrow({ where: { id: 'local' } }),
   ]);
 
+  const liveHome = session.haConnected && Boolean(profile.haToken);
+  const visibleDevices = liveHome && devices.some((device) => device.source === 'ha')
+    ? devices.filter((device) => device.source === 'ha')
+    : devices.filter((device) => device.source !== 'ha');
+
   const month = expenses.filter((item) => item.date.startsWith('2026-09'));
   const total = month.reduce((sum, item) => sum + item.amount, 0);
   const byTag = (tag: string) => month.filter((item) => item.tag === tag).reduce((sum, item) => sum + item.amount, 0);
@@ -29,8 +35,12 @@ export async function readSnapshot(db: PrismaClient) {
     meals,
     recipes: recipes.map((recipe) => ({ ...recipe, tags: readJson<string[]>(recipe.tags, []) })),
     targets: { kcal: target.kcal, protein: target.protein, carb: target.carb, fat: target.fat },
-    devices: devices.map((device) => ({
-      ...device,
+    devices: visibleDevices.map((device) => ({
+      id: device.id,
+      name: device.name,
+      room: device.room,
+      kind: device.kind,
+      on: device.on,
       paramLabel: device.paramLabel ?? undefined,
       paramValue: device.paramValue ?? undefined,
       offline: device.offline || undefined,
@@ -57,6 +67,11 @@ export async function readSnapshot(db: PrismaClient) {
       configured: Boolean(profile.modelBase),
       baseUrl: profile.modelBase,
       model: profile.modelName,
+    },
+    home: {
+      configured: Boolean(profile.haToken),
+      baseUrl: profile.haBase || DEFAULT_HA_BASE,
+      connected: liveHome,
     },
     spending: {
       monthTotal: total,

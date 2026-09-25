@@ -8,6 +8,7 @@ export function SettingsPage() {
   const store = useStore();
   const [draft, setDraft] = useState<Budgets>(store.budgets);
   const [modelDraft, setModelDraft] = useState({ baseUrl: '', model: '', apiKey: '' });
+  const [homeDraft, setHomeDraft] = useState({ baseUrl: '', token: '' });
   const modelBase = modelDraft.baseUrl || store.model.baseUrl;
   const modelName = modelDraft.model || store.model.model;
   const moduleSum = SPEND_TAGS.reduce((sum, tag) => sum + (Number(draft[tag]) || 0), 0);
@@ -71,8 +72,28 @@ export function SettingsPage() {
       <article className="card">
         <h2>数据接入</h2>
         <div className="toggle-row"><span>账单导入</span><span className="chip">CSV / 截图</span></div>
-        <div className="toggle-row"><span>智能家居</span><span className="chip">演示数据</span></div>
-        <p className="muted">支出统计可以导入 CSV，或用已连接的模型读账单截图。智能家居仍是演示数据。</p>
+        <div className="toggle-row"><span>智能家居</span><span className="chip">{store.home.connected ? '已连接' : '未连接'}</span></div>
+        <p className="muted">没填令牌或连不上时，家居仍用演示数据。令牌只留在本机服务里。</p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            store.setHome({ baseUrl: homeDraft.baseUrl || store.home.baseUrl, token: homeDraft.token });
+          }}
+          style={{ marginTop: 12 }}
+        >
+          <div className="form-grid">
+            <Field label="Home Assistant 地址" wide>
+              <input value={homeDraft.baseUrl || store.home.baseUrl} onChange={(event) => setHomeDraft({ ...homeDraft, baseUrl: event.target.value })} />
+            </Field>
+            <Field label="长期令牌" wide>
+              <input type="password" autoComplete="off" placeholder={store.home.configured ? '已保存，留空则不改' : '只保存在服务端'} value={homeDraft.token} onChange={(event) => setHomeDraft({ ...homeDraft, token: event.target.value })} />
+            </Field>
+          </div>
+          <div className="modal-actions">
+            <button type="submit" className="btn">保存家居</button>
+            <button type="button" className="btn-ghost" onClick={() => { void store.syncHome(); }}>检查连接</button>
+          </div>
+        </form>
       </article>
     </div>
   );

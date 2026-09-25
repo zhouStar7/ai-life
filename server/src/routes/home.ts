@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { readJson } from '../ids.js';
-import { nextDevice } from '../scenes.js';
+import { applyNamedScene, syncHome, toggleDevice } from '../homeLink.js';
 import { SEED_DEVICES } from '../seedData.js';
 import { readSnapshot } from '../snapshot.js';
 
@@ -24,11 +24,14 @@ export function registerHome(app: Hono, db: PrismaClient) {
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
+  app.post('/api/home/sync', async (c) => {
+    const error = await syncHome(db);
+    return c.json({ snapshot: await readSnapshot(db), ...(error ? { error } : {}) });
+  });
+
   app.post('/api/devices/:id/toggle', async (c) => {
-    const device = await db.device.findUnique({ where: { id: c.req.param('id') } });
-    if (!device || device.offline) return c.json({ snapshot: await readSnapshot(db) });
-    await db.device.update({ where: { id: device.id }, data: { on: !device.on } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    const error = await toggleDevice(db, c.req.param('id'));
+    return c.json({ snapshot: await readSnapshot(db), ...(error ? { error } : {}) });
   });
 
   app.delete('/api/devices/:id', async (c) => {
@@ -39,13 +42,8 @@ export function registerHome(app: Hono, db: PrismaClient) {
   app.post('/api/scenes/:name', async (c) => {
     const name = c.req.param('name');
     if (!SCENES.includes(name)) return c.json({ error: 'invalid' }, 400);
-    const devices = await db.device.findMany();
-    for (const device of devices) {
-      const next = nextDevice(device, name);
-      await db.device.update({ where: { id: device.id }, data: { on: next.on, paramValue: next.paramValue } });
-    }
-    await db.sessionState.update({ where: { id: 'local' }, data: { activeScene: name } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    const scene = await applyNamedScene(db, name);
+    return c.json({ snapshot: await readSnapshot(db), scene });
   });
 
   app.post('/api/alerts/:id/handle', async (c) => {
