@@ -46,10 +46,11 @@ export function SpendingPage() {
     else setParams({ tag: next });
   }
 
+  const showFilter = !store.home.connected && store.alerts.some((alert) => alert.id === 'a-filter' && !alert.handled);
   const tips = [
     { id: 'save-food', text: '餐饮里外卖偏多，本周可以换成两顿自炊。', href: '/diet', action: '去饮食' },
     { id: 'save-trip', text: '北京差旅的酒店已经确认，出发前把行李勾完。', href: '/travel', action: '去出行' },
-    { id: 'save-filter', text: '净水器滤芯剩余 8%，更换前可以先比价。', href: '/home', action: '去家居' },
+    ...(showFilter ? [{ id: 'save-filter', text: '净水器滤芯剩余 8%，更换前可以先比价。', href: '/home', action: '去家居' }] : []),
   ];
 
   return (
