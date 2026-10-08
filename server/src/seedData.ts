@@ -20,9 +20,9 @@ export const SUGGESTIONS = [
 ];
 
 export const SEED_MEALS = [
-  { id: 'm1', slot: '早餐', name: '燕麦酸奶碗', time: '08:20', kcal: 360, protein: 18, carb: 52, fat: 12 },
-  { id: 'm2', slot: '午餐', name: '香煎鸡胸沙拉', time: '12:30', kcal: 480, protein: 40, carb: 48, fat: 18 },
-  { id: 'm3', slot: '加餐', name: '希腊酸奶', time: '16:00', kcal: 140, protein: 10, carb: 45, fat: 12 },
+  { id: 'm1', slot: '早餐', name: '燕麦酸奶碗', time: '08:20', date: '2026-09-22', kcal: 360, protein: 18, carb: 52, fat: 12 },
+  { id: 'm2', slot: '午餐', name: '香煎鸡胸沙拉', time: '12:30', date: '2026-09-22', kcal: 480, protein: 40, carb: 48, fat: 18 },
+  { id: 'm3', slot: '加餐', name: '希腊酸奶', time: '16:00', date: '2026-09-22', kcal: 140, protein: 10, carb: 45, fat: 12 },
 ];
 
 export const SEED_RECIPES = [
