@@ -77,6 +77,6 @@ function percent(value: string | null) {
 }
 
 function celsius(value: string | null) {
-  const match = value?.match(/(\d+(?:\.\d+)?)\u00b0C/);
+  const match = value?.match(/(\d+(?:\.\d+)?)°C/);
   return match ? Number(match[1]) : null;
 }
