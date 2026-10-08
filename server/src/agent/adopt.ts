@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { readJson, uid } from '../ids.js';
 import { nextDevice } from '../scenes.js';
 import { readSnapshot } from '../snapshot.js';
+import { pickRecipe } from '../dietPlan.js';
 import { pickSuggestion } from '../suggestion.js';
 import { CROSS_ACTIONS, type Action } from './actions.js';
 
@@ -38,6 +39,7 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
             slot: action.slot,
             name: action.name,
             time: action.time,
+            date: '2026-09-22',
             kcal: action.kcal,
             protein: action.protein,
             carb: action.carb,
@@ -105,7 +107,14 @@ async function preset(db: PrismaClient, key: string | undefined, session: { sugg
     return [{ type: 'adopt_outfit', itemIds: pickSuggestion(session.suggestionIndex, session.weatherOn).itemIds.filter((id) => ids.has(id)) }];
   }
   if (key === 'protein') {
-    return [{ type: 'add_meal', slot: '晚餐', name: '鸡胸肉沙拉', time: '18:30', kcal: 420, protein: 42, carb: 18, fat: 16 }];
+    const [recipes, meals, target] = await Promise.all([
+      db.recipe.findMany(),
+      db.meal.findMany(),
+      db.nutritionTarget.findUniqueOrThrow({ where: { id: 'local' } }),
+    ]);
+    const picked = pickRecipe(recipes, meals, target);
+    if (!picked) return [];
+    return [{ type: 'add_meal', slot: picked.slot, name: picked.name, time: '18:30', kcal: picked.kcal, protein: picked.protein, carb: picked.carb, fat: picked.fat }];
   }
   if (key === 'filter') return [{ type: 'handle_alert', id: 'a-filter' }];
   return [];
