@@ -3,7 +3,7 @@ import type { Hono } from 'hono';
 import { recognizeClothing } from '../adapters/vision.js';
 import { uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
-import { pickSuggestion } from '../suggestion.js';
+import { blankDraft, draftsFromOrder, planOutfit } from '../wardrobePlan.js';
 
 const CATEGORIES = ['上衣', '裤装', '裙装', '外套', '鞋包'];
 
@@ -118,9 +118,31 @@ export function registerWardrobe(app: Hono, db: PrismaClient) {
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
+  app.post('/api/wardrobe/drafts', async (c) => {
+    const body = await c.req.json();
+    if (typeof body.text === 'string') return c.json({ drafts: draftsFromOrder(body.text) });
+    const image = typeof body.image === 'string' ? body.image : '';
+    if (!image.startsWith('data:image/')) return c.json({ error: 'invalid' }, 400);
+    const profile = await db.profile.findUniqueOrThrow({ where: { id: 'local' } });
+    if (!profile.modelBase) return c.json({ drafts: [blankDraft()], manual: true });
+    try {
+      const draft = await recognizeClothing(
+        { baseUrl: profile.modelBase, apiKey: profile.modelKey, model: profile.modelName },
+        image,
+      );
+      if (!draft) return c.json({ error: 'unreadable' }, 422);
+      return c.json({ drafts: [draft], manual: false });
+    } catch {
+      return c.json({ drafts: [blankDraft()], manual: true });
+    }
+  });
+
   app.get('/api/wardrobe/suggestion', async (c) => {
-    const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    return c.json(pickSuggestion(session.suggestionIndex, session.weatherOn));
+    const [session, items] = await Promise.all([
+      db.sessionState.findUniqueOrThrow({ where: { id: 'local' } }),
+      db.wardrobeItem.findMany(),
+    ]);
+    return c.json(planOutfit(items, session.suggestionIndex, session.weatherOn, session.weatherLabel));
   });
 
   app.post('/api/wardrobe/suggestion/refresh', async (c) => {
