@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { colorHex, itemNames } from '../format';
 import { useStore } from '../store';
 import { CATEGORIES, type ClothingDraft, type WardrobeCategory, type WardrobeItem } from '../types';
+import { blankDraft, similarItems } from '../wardrobePlan';
 import { Empty, Field, Modal, SpendCard } from '../components/ui';
 
 type Draft = Omit<WardrobeItem, 'id' | 'wears' | 'createdAt'>;
@@ -14,6 +15,8 @@ export function WardrobePage() {
   const [sort, setSort] = useState<'new' | 'wears'>('new');
   const [editor, setEditor] = useState<WardrobeItem | ClothingDraft | 'new' | null>(null);
   const [batch, setBatch] = useState<ClothingDraft[] | null>(null);
+  const [batchManual, setBatchManual] = useState(false);
+  const [ordering, setOrdering] = useState(false);
   const [reading, setReading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -27,14 +30,21 @@ export function WardrobePage() {
     if (!files || files.length === 0) return;
     setReading(true);
     const found: ClothingDraft[] = [];
+    let manual = false;
     for (const file of files) {
       const draft = await store.recognizeClothing(await readFile(file, 'data'));
-      if (draft) found.push(draft);
+      if (draft === 'manual') {
+        manual = true;
+        found.push(blankDraft());
+      } else if (draft) found.push(draft);
     }
     setReading(false);
     if (photoRef.current) photoRef.current.value = '';
     if (found.length === 1) setEditor(found[0]);
-    else if (found.length > 1) setBatch(found);
+    else if (found.length > 1) {
+      setBatchManual(manual);
+      setBatch(found);
+    }
   }
 
   function photoButton(testId?: string) {
@@ -51,6 +61,7 @@ export function WardrobePage() {
         <h1 className="display" style={{ fontSize: 32 }}>衣橱</h1>
         <div className="row-actions">
           {photoButton('photo-item')}
+          <button type="button" className="btn-ghost" onClick={() => setOrdering(true)}>粘贴订单</button>
           <button type="button" className="btn" data-testid="add-item" onClick={() => setEditor('new')}>添加单品</button>
         </div>
       </header>
@@ -106,7 +117,7 @@ export function WardrobePage() {
         <aside className="stack">
           <article className="card suggestion">
             <h2>今日穿搭</h2>
-            <div className="weather">{store.weatherOn ? '22°C · 多云' : '天气未知'}</div>
+            <div className="weather">{store.weatherOn ? store.weatherLabel : '天气未知'}</div>
             {store.items.length === 0 ? (
               <p className="reason">还没有单品，建议会在你添加之后出现。</p>
             ) : (
@@ -141,7 +152,8 @@ export function WardrobePage() {
         </aside>
       </div>
       {editor ? <ItemModal initial={editor} onClose={() => setEditor(null)} /> : null}
-      {batch ? <BatchModal initial={batch} onClose={() => setBatch(null)} /> : null}
+      {batch ? <BatchModal initial={batch} manual={batchManual} onClose={() => setBatch(null)} /> : null}
+      {ordering ? <OrderModal onClose={() => setOrdering(false)} onDrafts={(rows) => { setBatchManual(rows.some((row) => !row.name || !row.color)); setBatch(rows); }} /> : null}
     </>
   );
 }
@@ -161,7 +173,7 @@ function ItemModal({ initial, onClose }: { initial: WardrobeItem | ClothingDraft
   const editing = typeof initial === 'object' && 'id' in initial ? initial : null;
   const fromPhoto = initial !== 'new' && !editing;
   const [draft, setDraft] = useState<Draft>(editing ?? (initial === 'new' ? EMPTY : initial));
-  const similar = store.items.filter((item) => item.id !== editing?.id && item.category === draft.category && draft.color && item.color === draft.color);
+  const similar = similarItems(store.items, draft, editing?.id);
 
   function save() {
     if (!draft.name.trim() || !draft.color.trim()) return;
@@ -172,7 +184,7 @@ function ItemModal({ initial, onClose }: { initial: WardrobeItem | ClothingDraft
 
   return (
     <Modal title={editing ? '编辑单品' : fromPhoto ? '确认入库' : '添加单品'} onClose={onClose}>
-      {fromPhoto ? <p className="muted">分类、颜色和风格已由模型填好，场合里记的是风格。确认后入库。</p> : null}
+      {fromPhoto ? <p className="muted">{draft.name ? '分类、颜色和风格已由模型填好，场合里记的是风格。确认后入库。' : '模型没接上。补上名称、颜色和风格后再入库。'}</p> : null}
       <form onSubmit={(event) => { event.preventDefault(); save(); }}>
         <div className="form-grid">
           <Field label="名称" wide><input autoFocus required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field>
@@ -195,26 +207,71 @@ function ItemModal({ initial, onClose }: { initial: WardrobeItem | ClothingDraft
   );
 }
 
-function BatchModal({ initial, onClose }: { initial: ClothingDraft[]; onClose: () => void }) {
+function BatchModal({ initial, manual, onClose }: { initial: ClothingDraft[]; manual: boolean; onClose: () => void }) {
   const store = useStore();
   const [rows, setRows] = useState(initial);
+  const ready = rows.length > 0 && rows.every((row) => row.name.trim() && row.color.trim());
+
+  function patch(index: number, next: Partial<ClothingDraft>) {
+    setRows((current) => current.map((row, item) => (item === index ? { ...row, ...next } : row)));
+  }
 
   return (
     <Modal title="确认入库" onClose={onClose}>
-      <p className="muted">分类、颜色和风格已填好。确认后一起写入衣橱。</p>
-      {rows.map((row, index) => (
-        <div className="txn" key={`${row.name}-${index}`}>
-          <span className="pill">{row.category}</span>
-          <div>
-            <strong>{row.name}</strong>
-            <p className="muted">{row.color} · {row.occasion}</p>
+      <p className="muted">{manual ? '模型没接上，或订单里还缺字段。补上名称、颜色和风格后再入库。' : '分类、颜色和风格已填好，场合里记的是风格。确认后一起写入衣橱。'}</p>
+      {rows.map((row, index) => {
+        const similar = similarItems(store.items, row);
+        return (
+          <div className="stack" key={`${row.category}-${index}`} style={{ marginTop: 12 }}>
+            <div className="form-grid">
+              <Field label="名称"><input value={row.name} onChange={(event) => patch(index, { name: event.target.value })} /></Field>
+              <Field label="分类">
+                <select value={row.category} onChange={(event) => patch(index, { category: event.target.value as WardrobeCategory })}>
+                  {CATEGORIES.map((item) => <option key={item}>{item}</option>)}
+                </select>
+              </Field>
+              <Field label="颜色"><input value={row.color} onChange={(event) => patch(index, { color: event.target.value })} /></Field>
+              <Field label="风格"><input value={row.occasion} onChange={(event) => patch(index, { occasion: event.target.value })} /></Field>
+            </div>
+            {similar.length > 0 ? <p className="note">衣橱里已有相近单品：{similar.map((item) => item.name).join('、')}</p> : null}
+            <button type="button" className="btn-text small" onClick={() => setRows((current) => current.filter((_, item) => item !== index))}>去掉这件</button>
           </div>
-          <button type="button" className="btn-text small" onClick={() => setRows((current) => current.filter((_, item) => item !== index))}>去掉</button>
-        </div>
-      ))}
+        );
+      })}
       <div className="modal-actions">
         <button type="button" className="btn-ghost" onClick={onClose}>取消</button>
-        <button type="button" className="btn" disabled={rows.length === 0} onClick={() => { store.addItems(rows); onClose(); }}>确认入库</button>
+        <button type="button" className="btn" disabled={!ready} onClick={() => { store.addItems(rows.map((row) => ({ ...row, name: row.name.trim(), color: row.color.trim() }))); onClose(); }}>确认入库</button>
+      </div>
+    </Modal>
+  );
+}
+
+function OrderModal({ onClose, onDrafts }: { onClose: () => void; onDrafts: (rows: ClothingDraft[]) => void }) {
+  const store = useStore();
+  const [text, setText] = useState('');
+  const [reading, setReading] = useState(false);
+  const [empty, setEmpty] = useState(false);
+
+  async function read() {
+    setReading(true);
+    const drafts = await store.draftFromOrder(text);
+    setReading(false);
+    if (drafts.length === 0) {
+      setEmpty(true);
+      return;
+    }
+    onDrafts(drafts);
+    onClose();
+  }
+
+  return (
+    <Modal title="粘贴订单" onClose={onClose}>
+      <p className="muted">贴上商品名称，先生成草稿。名称、颜色或风格空着时，确认前再补。</p>
+      <textarea value={text} onChange={(event) => { setText(event.target.value); setEmpty(false); }} rows={6} style={{ width: '100%', marginTop: 12 }} />
+      {empty ? <p className="note" style={{ marginTop: 12 }}>没有读出衣服。写上衬衫、裤子、裙子、外套或鞋包后再试。</p> : null}
+      <div className="modal-actions">
+        <button type="button" className="btn-ghost" onClick={onClose}>取消</button>
+        <button type="button" className="btn" disabled={reading || !text.trim()} onClick={() => { void read(); }}>{reading ? '读取中…' : '生成草稿'}</button>
       </div>
     </Modal>
   );

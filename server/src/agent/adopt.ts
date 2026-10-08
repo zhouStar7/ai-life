@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { readJson, uid } from '../ids.js';
 import { nextDevice } from '../scenes.js';
 import { readSnapshot } from '../snapshot.js';
-import { pickSuggestion } from '../suggestion.js';
+import { planOutfit } from '../wardrobePlan.js';
 import { CROSS_ACTIONS, type Action } from './actions.js';
 
 function withTip(tips: string[], id: string) {
@@ -98,11 +98,10 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
   return readSnapshot(db);
 }
 
-async function preset(db: PrismaClient, key: string | undefined, session: { suggestionIndex: number; weatherOn: boolean }): Promise<Action[]> {
+async function preset(db: PrismaClient, key: string | undefined, session: { suggestionIndex: number; weatherOn: boolean; weatherLabel: string }): Promise<Action[]> {
   if (key === 'outfit') {
     const items = await db.wardrobeItem.findMany();
-    const ids = new Set(items.map((item) => item.id));
-    return [{ type: 'adopt_outfit', itemIds: pickSuggestion(session.suggestionIndex, session.weatherOn).itemIds.filter((id) => ids.has(id)) }];
+    return [{ type: 'adopt_outfit', itemIds: planOutfit(items, session.suggestionIndex, session.weatherOn, session.weatherLabel).itemIds }];
   }
   if (key === 'protein') {
     return [{ type: 'add_meal', slot: '晚餐', name: '鸡胸肉沙拉', time: '18:30', kcal: 420, protein: 42, carb: 18, fat: 16 }];
