@@ -118,6 +118,13 @@ model Expense {
   date     String
   merchant String
   note     String
+  tripId   String @default("")
+}
+
+model PackingTemplate {
+  id    String @id
+  name  String
+  items String
 }
 
 model Budget {
