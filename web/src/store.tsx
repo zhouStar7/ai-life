@@ -78,7 +78,9 @@ interface StoreValue {
   unbindDevice: (id: string) => void;
   bindSampleDevices: () => void;
   applyScene: (name: SceneName) => void;
+  bindScene: (name: SceneName, target: string) => void;
   handleAlert: (id: string) => void;
+  dismissHomeAlerts: () => void;
   selectTrip: (id: string) => void;
   togglePack: (tripId: string, packId: string) => void;
   addTrip: (input: Pick<Trip, 'title' | 'status' | 'transport' | 'dateLabel'>) => void;
@@ -187,7 +189,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [weatherLabel, setWeatherLabel] = useState('22°C 多云');
   const [online, setOnline] = useState(false);
   const [model, setModelState] = useState({ configured: false, baseUrl: '', model: '' });
-  const [home, setHomeState] = useState<HomeLink>({ configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false });
+  const [home, setHomeState] = useState<HomeLink>({ configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false, sceneCatalog: [], sceneBindings: {} });
   const sourceRef = useRef<'api' | 'memory'>('memory');
 
   function applyRemote(snapshot: RemoteSnapshot) {
@@ -211,7 +213,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setActiveTripId(snapshot.activeTripId || 't-bj');
     setAdoptedTips(snapshot.adoptedTips);
     setModelState(snapshot.model);
-    setHomeState(snapshot.home ?? { configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false });
+    setHomeState({
+      configured: snapshot.home?.configured ?? false,
+      baseUrl: snapshot.home?.baseUrl || 'http://192.168.0.111:8123',
+      connected: snapshot.home?.connected ?? false,
+      sceneCatalog: snapshot.home?.sceneCatalog ?? [],
+      sceneBindings: snapshot.home?.sceneBindings ?? {},
+    });
   }
 
   useEffect(() => {
@@ -561,6 +569,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         applyScene(name);
       })();
     },
+    bindScene: (name, target) => {
+      void (async () => {
+        if (await commit(`/api/home/scenes/${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify({ target }) })) {
+          toast(target === 'devices' ? `「${name}」改为按设备动作` : `「${name}」已绑到场景`);
+          return;
+        }
+        setHomeState((current) => ({ ...current, sceneBindings: { ...current.sceneBindings, [name]: target } }));
+      })();
+    },
     handleAlert: (id) => {
       void (async () => {
         if (await commit(`/api/alerts/${id}/handle`, { method: 'POST' })) {
@@ -568,7 +585,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return;
         }
         setAlerts((current) => current.map((alert) => (alert.id === id ? { ...alert, handled: true } : alert)));
-        if (id === 'a-filter') markTip('filter');
+        if (id === 'a-filter' || id.startsWith('ha-')) markTip('filter');
         toast('已记下，稍后处理');
       })();
     },
@@ -820,6 +837,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         markTip('protein');
         toast('已按建议补上鸡胸肉沙拉');
+      })();
+    },
+    dismissHomeAlerts: () => {
+      void (async () => {
+        const ids = alerts.filter((alert) => !alert.handled && alert.id.startsWith('ha-')).map((alert) => alert.id);
+        let remote = false;
+        for (const id of ids) {
+          if (await commit(`/api/alerts/${encodeURIComponent(id)}/handle`, { method: 'POST' })) remote = true;
+        }
+        if (remote) {
+          markTip('filter');
+          return;
+        }
+        setAlerts((current) => current.map((alert) => (ids.includes(alert.id) ? { ...alert, handled: true } : alert)));
+        markTip('filter');
       })();
     },
     adoptFilterTip: () => {

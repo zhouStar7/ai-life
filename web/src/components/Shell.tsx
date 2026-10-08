@@ -178,7 +178,10 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
   }
 
   function localPlan(value: string) {
-    const filterTitle = store.alerts.find((alert) => alert.id === 'a-filter')?.title ?? '净水器滤芯该换了';
+    const liveAlerts = store.alerts.filter((alert) => !alert.handled && alert.id.startsWith('ha-'));
+    const filterTitle = store.home.connected
+      ? (liveAlerts.length > 0 ? liveAlerts.map((alert) => alert.title).slice(0, 3).join('、') : '家里没有待处理的提醒')
+      : (store.alerts.find((alert) => alert.id === 'a-filter')?.title ?? '净水器滤芯该换了');
     if (/穿|衣|搭配/.test(value) && !/下雨|降温|交流会|出差/.test(value)) {
       setPlan({ title: '穿搭可以这么定', lines: [store.suggestion.title, store.suggestion.reason], href: '/wardrobe', label: '去衣橱采纳' });
       return;
@@ -216,7 +219,7 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
     }
     setPlan({
       title: '今天可以这样安排',
-      lines: [`穿搭：${store.suggestion.title}`, gap > 0 ? `饮食：蛋白质还差 ${gap} g` : '饮食：蛋白质已达标', '家居：滤芯该换了', '出行：北京差旅行李还没勾完'],
+      lines: [`穿搭：${store.suggestion.title}`, gap > 0 ? `饮食：蛋白质还差 ${gap} g` : '饮食：蛋白质已达标', `家居：${store.home.connected ? filterTitle : '滤芯该换了'}`, '出行：北京差旅行李还没勾完'],
       href: '/',
       label: '回到概览',
     });

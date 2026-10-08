@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { readJson } from '../ids.js';
-import { applyNamedScene, syncHome, toggleDevice } from '../homeLink.js';
+import { applyNamedScene, bindScene, syncHome, toggleDevice } from '../homeLink.js';
 import { SEED_DEVICES } from '../seedData.js';
 import { readSnapshot } from '../snapshot.js';
 
@@ -36,6 +36,15 @@ export function registerHome(app: Hono, db: PrismaClient) {
 
   app.delete('/api/devices/:id', async (c) => {
     await db.device.delete({ where: { id: c.req.param('id') } });
+    return c.json({ snapshot: await readSnapshot(db) });
+  });
+
+  app.post('/api/home/scenes/:name', async (c) => {
+    const name = c.req.param('name');
+    const body = await c.req.json().catch(() => ({} as { target?: unknown }));
+    const target = typeof body.target === 'string' ? body.target : '';
+    const error = await bindScene(db, name, target);
+    if (error) return c.json({ error }, 400);
     return c.json({ snapshot: await readSnapshot(db) });
   });
 

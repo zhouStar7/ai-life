@@ -15,6 +15,7 @@ export function OverviewPage() {
   const abnormal = store.alerts.filter((alert) => !alert.handled && alert.level === '高').length + store.devices.filter((device) => device.offline).length;
   const upcoming = store.trips.find((trip) => trip.status === '即将开始') ?? store.trips[0];
   const filterAlert = store.alerts.find((alert) => alert.id === 'a-filter');
+  const liveAlerts = store.home.connected ? store.alerts.filter((alert) => !alert.handled && alert.id.startsWith('ha-')) : [];
 
   const tips = [
     {
@@ -31,13 +32,21 @@ export function OverviewPage() {
       done: store.adoptedTips.includes('protein') || gap === 0,
       action: () => { store.adoptProteinTip(); navigate('/diet'); },
     },
-    {
-      id: 'filter',
-      title: filterAlert?.title ?? '净水器滤芯该换了',
-      detail: filterAlert?.detail ?? '处理前可以先比价。',
-      done: store.adoptedTips.includes('filter') || store.alerts.find((alert) => alert.id === 'a-filter')?.handled === true,
-      action: () => { store.adoptFilterTip(); navigate('/home'); },
-    },
+    ...(store.home.connected
+      ? (liveAlerts.length > 0 ? [{
+        id: 'filter',
+        title: liveAlerts.length > 1 ? `${liveAlerts.length} 项家居异常` : liveAlerts[0].title,
+        detail: liveAlerts.map((alert) => alert.title).join('、'),
+        done: false,
+        action: () => { store.dismissHomeAlerts(); navigate('/home'); },
+      }] : [])
+      : [{
+        id: 'filter',
+        title: filterAlert?.title ?? '净水器滤芯该换了',
+        detail: filterAlert?.detail ?? '处理前可以先比价。',
+        done: store.adoptedTips.includes('filter') || filterAlert?.handled === true,
+        action: () => { store.adoptFilterTip(); navigate('/home'); },
+      }]),
     {
       id: 'prep',
       title: upcoming ? `${upcoming.title}出发前记得离家` : '最近没有待出发的行程',

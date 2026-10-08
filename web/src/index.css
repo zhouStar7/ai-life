@@ -381,6 +381,7 @@ html[data-page="spending"] .card { background: linear-gradient(180deg, #12161d, 
 .display { font-size: 44px; font-weight: 900; line-height: 1.05; }
 html[data-page="wardrobe"] .display { font-size: 56px; }
 .row-actions, .scene-row, .pills { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.scene-bind { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .pills { margin-bottom: 14px; }
 
 .btn, .btn-ghost, .btn-text { border-radius: var(--radius-box); border: 0; padding: 8px 14px; }
