@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 import { api } from './api/client';
 import { loadSnapshot, saveSnapshot } from './api/snapshot';
-import { itemNames, uid } from './format';
+import { uid } from './format';
+import { draftsFromOrder, planOutfit } from './wardrobePlan';
 import {
   SEED_ALERTS,
   SEED_BUDGETS,
@@ -15,7 +16,6 @@ import {
   SEED_RECIPES,
   SEED_TARGETS,
   SEED_TRIPS,
-  SUGGESTIONS,
 } from './seed';
 import type {
   Budgets,
@@ -60,7 +60,8 @@ interface StoreValue {
   toasts: Toast[];
   addItem: (input: Omit<WardrobeItem, 'id' | 'wears' | 'createdAt'>) => void;
   addItems: (inputs: ClothingDraft[]) => void;
-  recognizeClothing: (image: string) => Promise<ClothingDraft | null>;
+  recognizeClothing: (image: string) => Promise<ClothingDraft | 'manual' | null>;
+  draftFromOrder: (text: string) => Promise<ClothingDraft[]>;
   updateItem: (item: WardrobeItem) => void;
   removeItem: (id: string) => void;
   toggleFavorite: (id: string) => void;
@@ -252,16 +253,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const suggestion = useMemo(() => {
-    const pool = SUGGESTIONS.filter((item) => item.weather === weatherOn);
-    const picked = pool[suggestionIndex % pool.length] ?? SUGGESTIONS[0];
-    const names = itemNames(items, picked.itemIds);
-    return {
-      title: names.length > 0 ? names.join(' · ') : picked.title,
-      reason: weatherOn ? picked.reason : '没拿到天气，已改成按通勤场合推荐。',
-      itemIds: picked.itemIds.filter((id) => items.some((item) => item.id === id)),
-    };
-  }, [items, suggestionIndex, weatherOn]);
+  const suggestion = useMemo(
+    () => planOutfit(items, suggestionIndex, weatherOn, weatherLabel),
+    [items, suggestionIndex, weatherLabel, weatherOn],
+  );
 
   function toast(message: string) {
     const id = uid('toast');
@@ -346,17 +341,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })();
     },
     recognizeClothing: async (image) => {
-      if (sourceRef.current !== 'api') {
-        toast('本地服务没开，照片还识别不了');
-        return null;
-      }
+      if (sourceRef.current !== 'api') return 'manual';
       try {
         return await api<ClothingDraft>('/api/wardrobe/recognize', { method: 'POST', body: JSON.stringify({ image }) });
       } catch (error) {
         const status = error instanceof Error ? error.message : '';
-        toast(status === '503' ? '先在设置里接上能看图的模型' : '这张照片没有识别出来');
+        if (status === '503') return 'manual';
+        toast('这张照片没有识别出来');
         return null;
       }
+    },
+    draftFromOrder: async (text) => {
+      if (sourceRef.current === 'api') {
+        try {
+          const body = await api<{ drafts: ClothingDraft[] }>('/api/wardrobe/drafts', {
+            method: 'POST',
+            body: JSON.stringify({ text }),
+          });
+          return body.drafts;
+        } catch {
+          sourceRef.current = 'memory';
+          setOnline(false);
+        }
+      }
+      return draftsFromOrder(text);
     },
     updateItem: (item) => {
       void (async () => {
