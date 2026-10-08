@@ -176,11 +176,15 @@ test('a reachable assistant replaces cards and a missing scene is not called', a
   const away = await json('/api/scenes/离家', { method: 'POST' });
   assert.equal(away.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url === '/api/services/scene/turn_on' && call.body.includes('scene.away')), true);
+  assert.equal(calls.some((call) => call.url.startsWith('/api/services/') && !call.url.includes('/scene/')), false);
 
   calls.length = 0;
   const cinema = await json('/api/scenes/影院', { method: 'POST' });
-  assert.equal(cinema.body.scene.via, 'local');
+  assert.equal(cinema.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url.includes('/api/services/scene/')), false);
+  assert.equal(calls.some((call) => call.url === '/api/services/light/turn_on' && call.body.includes('brightness_pct')), true);
+  assert.equal(calls.some((call) => call.url === '/api/services/cover/close_cover'), true);
+  assert.equal(calls.some((call) => call.url === '/api/services/media_player/turn_on'), true);
 });
 
 test('an unreachable assistant is marked disconnected and demo devices remain', async () => {

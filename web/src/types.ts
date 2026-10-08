@@ -70,10 +70,17 @@ export interface NutritionTarget {
   fat: number;
 }
 
+export interface SceneOption {
+  id: string;
+  name: string;
+}
+
 export interface HomeLink {
   configured: boolean;
   baseUrl: string;
   connected: boolean;
+  sceneCatalog: SceneOption[];
+  sceneBindings: Partial<Record<SceneName, string>>;
 }
 
 export interface ItineraryDraft {
@@ -96,7 +103,7 @@ export interface TripChain {
 export interface Device {
   id: string;
   name: string;
-  room: Room;
+  room: string;
   kind: '灯' | '空调' | '窗帘' | '电视' | '传感器' | '净水' | '家电' | '门锁';
   on: boolean;
   paramLabel?: string;
