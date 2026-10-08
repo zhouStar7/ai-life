@@ -75,7 +75,7 @@ export function TravelPage() {
           <aside className="stack">
             <article className="card suggestion">
               <h2>出行准备包</h2>
-              <p className="reason">穿搭沿用今日通勤建议，出发前切到离家，饮食改成附近简餐。</p>
+              <p className="reason">按目的地和天气从衣橱选单品，出发前切到离家，并给出一顿可以采纳的餐。</p>
               <div className="row-actions">
                 <button type="button" className="btn" disabled={trip.prepAdopted} onClick={() => store.adoptPrep(trip.id)}>{trip.prepAdopted ? '已采纳' : '采纳准备包'}</button>
                 <button type="button" className="btn-ghost" onClick={() => { void store.runChain(trip.id).then((result) => { if (result) setChain(result); }); }}>按行程串起来</button>
@@ -83,8 +83,11 @@ export function TravelPage() {
               {chain && chain.trip.id === trip.id ? (
                 <div className="note" style={{ marginTop: 12 }}>
                   <p>穿搭：{chain.outfit.title}</p>
+                  <p className="muted">{chain.outfit.reason}</p>
                   <p>离家：{chain.scene.via === 'home-assistant' ? '已交给 Home Assistant' : '未连接，只更新了本机场景'}</p>
-                  <p>预算：行 {yuan(chain.budget.spent)} / {yuan(chain.budget.budget)}，剩余 {yuan(chain.budget.remain)}</p>
+                  <p>这一顿：{chain.meal.name}</p>
+                  <button type="button" className="btn small" onClick={() => store.adoptTripMeal(trip.id, chain.meal.name)}>采纳这顿</button>
+                  <p>本趟票务食宿 {yuan(chain.budget.trip)} · 本月行 {yuan(chain.budget.spent)} / {yuan(chain.budget.budget)}</p>
                 </div>
               ) : null}
             </article>
@@ -98,7 +101,9 @@ export function TravelPage() {
                   <span>{item.text}</span>
                 </label>
               ))}
+              <PackingTools trip={trip} />
             </article>
+            <TripSpend trip={trip} />
             <SpendCard tag="行" label="本月出行支出" />
           </aside>
         </div>
@@ -131,6 +136,7 @@ function PasteModal({ onClose }: { onClose: () => void }) {
           <p>{draft.title} · {draft.transport} · {draft.dateLabel}</p>
           <p>时间线：{draft.timeline.map((node) => node.title).join('、')}</p>
           <p>打包：{draft.packing.join('、')}</p>
+          {draft.source === 'model' ? <p className="muted">这是模型读出的时间线、交通和酒店，确认后再写入。</p> : null}
         </div>
       ) : null}
       <div className="modal-actions">
@@ -139,6 +145,69 @@ function PasteModal({ onClose }: { onClose: () => void }) {
         <button type="button" className="btn" disabled={!draft} onClick={() => { if (!draft) return; void store.importTrip(draft).then((ok) => { if (ok) onClose(); }); }}>写入行程</button>
       </div>
     </Modal>
+  );
+}
+
+function PackingTools({ trip }: { trip: Trip }) {
+  const store = useStore();
+  const [text, setText] = useState('');
+  const [name, setName] = useState('');
+
+  return (
+    <div className="stack" style={{ marginTop: 12 }}>
+      <form className="row-actions" onSubmit={(event) => { event.preventDefault(); if (!text.trim()) return; store.addPackingLine(trip.id, text.trim()); setText(''); }}>
+        <input aria-label="行李一行" value={text} placeholder="加一行行李" onChange={(event) => setText(event.target.value)} />
+        <button type="submit" className="btn-ghost small">添加</button>
+      </form>
+      <form className="row-actions" onSubmit={(event) => { event.preventDefault(); if (!name.trim()) return; store.savePackingTemplate(trip.id, name.trim()); setName(''); }}>
+        <input aria-label="模板名称" value={name} placeholder="模板名称" onChange={(event) => setName(event.target.value)} />
+        <button type="submit" className="btn-ghost small">存成模板</button>
+      </form>
+      {store.packingTemplates.length > 0 ? (
+        <div className="pills">
+          {store.packingTemplates.map((template) => (
+            <button type="button" key={template.id} className="pill" onClick={() => store.applyPackingTemplate(trip.id, template.id)}>{template.name}</button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TripSpend({ trip }: { trip: Trip }) {
+  const store = useStore();
+  const rows = store.expenses.filter((item) => item.tripId === trip.id && item.tag === '行');
+  const [amount, setAmount] = useState('');
+  const [merchant, setMerchant] = useState('');
+  const [kind, setKind] = useState<'票务' | '食宿'>('票务');
+  const total = rows.reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <article className="card">
+      <h2>这一趟的票务和食宿</h2>
+      <p className="muted">{rows.length === 0 ? '还没有归到这趟的费用。' : `合计 ${yuan(total)}`}</p>
+      {rows.map((item) => (
+        <p key={item.id}>{item.note} · {item.merchant} · {yuan(item.amount)}</p>
+      ))}
+      <form className="stack" style={{ marginTop: 8 }} onSubmit={(event) => {
+        event.preventDefault();
+        const value = Math.round(Number(amount));
+        if (!merchant.trim() || !Number.isFinite(value) || value <= 0) return;
+        store.addTripExpense(trip.id, { amount: value, merchant: merchant.trim(), kind });
+        setAmount('');
+        setMerchant('');
+      }}>
+        <div className="row-actions">
+          <select aria-label="费用种类" value={kind} onChange={(event) => setKind(event.target.value as '票务' | '食宿')}>
+            <option value="票务">票务</option>
+            <option value="食宿">食宿</option>
+          </select>
+          <input aria-label="金额" inputMode="numeric" placeholder="金额" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          <input aria-label="商户" placeholder="商户" value={merchant} onChange={(event) => setMerchant(event.target.value)} />
+          <button type="submit" className="btn-ghost small">记到这趟</button>
+        </div>
+      </form>
+    </article>
   );
 }
 

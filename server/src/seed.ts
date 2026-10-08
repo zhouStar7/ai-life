@@ -42,7 +42,9 @@ export async function seedIfEmpty(db: PrismaClient) {
       packing: JSON.stringify(trip.packing),
     })),
   });
-  await db.expense.createMany({ data: SEED_EXPENSES });
+  await db.expense.createMany({
+    data: SEED_EXPENSES.map((expense) => ({ ...expense, tripId: 'tripId' in expense ? expense.tripId : '' })),
+  });
   await db.budget.create({ data: { id: 'local', total: 10000, cloth: 2000, food: 3000, home: 1500, trip: 3500 } });
   await db.notice.create({ data: { id: 'local', outfit: true, budget: true, device: true } });
 }
