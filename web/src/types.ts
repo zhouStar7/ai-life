@@ -46,6 +46,7 @@ export interface Meal {
   slot: MealSlot;
   name: string;
   time: string;
+  date: string;
   kcal: number;
   protein: number;
   carb: number;

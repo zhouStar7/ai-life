@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { DIET_TODAY, pickRecipe } from '../dietPlan';
 import { monthExpenses, share, sumAmount, yuan } from '../format';
 import { useStore } from '../store';
 import { SPEND_TAGS } from '../types';
@@ -8,9 +9,12 @@ export function OverviewPage() {
   const month = monthExpenses(store.expenses);
   const total = sumAmount(month);
   const left = store.budgets.total - total;
-  const protein = store.meals.reduce((sum, meal) => sum + meal.protein, 0);
-  const kcal = store.meals.reduce((sum, meal) => sum + meal.kcal, 0);
-  const gap = Math.max(0, store.targets.protein - protein);
+  const todayMeals = store.meals.filter((meal) => (meal.date || DIET_TODAY) === DIET_TODAY);
+  const protein = todayMeals.reduce((sum, meal) => sum + meal.protein, 0);
+  const kcal = todayMeals.reduce((sum, meal) => sum + meal.kcal, 0);
+  const proteinGap = Math.max(0, store.targets.protein - protein);
+  const kcalGap = Math.max(0, store.targets.kcal - kcal);
+  const mealPick = pickRecipe(store.recipes, todayMeals, store.targets);
   const online = store.devices.filter((device) => !device.offline).length;
   const abnormal = store.alerts.filter((alert) => !alert.handled && alert.level === '高').length + store.devices.filter((device) => device.offline).length;
   const upcoming = store.trips.find((trip) => trip.status === '即将开始') ?? store.trips[0];
@@ -26,10 +30,10 @@ export function OverviewPage() {
     },
     {
       id: 'protein',
-      title: gap > 0 ? `蛋白质还差 ${gap} g` : '今日蛋白质已达标',
-      detail: gap > 0 ? '可以补一份鸡胸肉沙拉。' : '三餐结构已经够用。',
-      done: store.adoptedTips.includes('protein') || gap === 0,
-      action: () => { store.adoptProteinTip(); navigate('/diet'); },
+      title: mealPick ? `还可以补一顿${mealPick.slot}` : '今日热量和蛋白质已达标',
+      detail: mealPick ? `热量还剩 ${kcalGap} kcal，蛋白质还差 ${proteinGap} g，可以加一份${mealPick.name}。` : '三餐结构已经够用。',
+      done: !mealPick,
+      action: () => { if (mealPick) store.applyRecipe(mealPick.id); navigate('/diet'); },
     },
     {
       id: 'filter',

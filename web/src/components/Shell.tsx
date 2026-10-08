@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { DIET_TODAY, pickRecipe } from '../dietPlan';
 import { useStore } from '../store';
 import { DietPage } from '../pages/Diet';
 import { HomePage } from '../pages/Home';
@@ -154,8 +155,10 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
   const store = useStore();
   const [text, setText] = useState(seed);
   const [plan, setPlan] = useState<{ title: string; lines: string[]; href: string; label: string; actions?: unknown[]; key?: string } | null>(null);
-  const protein = store.meals.reduce((sum, meal) => sum + meal.protein, 0);
-  const gap = Math.max(0, store.targets.protein - protein);
+  const todayMeals = store.meals.filter((meal) => (meal.date || DIET_TODAY) === DIET_TODAY);
+  const proteinGap = Math.max(0, store.targets.protein - todayMeals.reduce((sum, meal) => sum + meal.protein, 0));
+  const kcalGap = Math.max(0, store.targets.kcal - todayMeals.reduce((sum, meal) => sum + meal.kcal, 0));
+  const mealPick = pickRecipe(store.recipes, todayMeals, store.targets);
 
   async function submit(raw: string) {
     const value = raw.trim();
@@ -184,7 +187,7 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
       return;
     }
     if (/吃|餐|食|热量|蛋白/.test(value)) {
-      setPlan({ title: '饮食补上这一口', lines: [gap > 0 ? `蛋白质还差 ${gap} g，建议加一份鸡胸肉沙拉。` : '今天蛋白质已经够了。', '外卖偏多的时候，优先从食谱里选自炊。'], href: '/diet', label: '去饮食' });
+      setPlan({ title: '饮食补上这一口', lines: [mealPick ? `热量还剩 ${kcalGap} kcal，蛋白质还差 ${proteinGap} g，可以加一份${mealPick.name}。` : '今天热量和蛋白质已经够了。', '外卖偏多的时候，优先从食谱里选自炊。'], href: '/diet', label: '去饮食' });
       return;
     }
     if (/家|灯|空调|滤芯|场景/.test(value)) {
@@ -216,7 +219,7 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
     }
     setPlan({
       title: '今天可以这样安排',
-      lines: [`穿搭：${store.suggestion.title}`, gap > 0 ? `饮食：蛋白质还差 ${gap} g` : '饮食：蛋白质已达标', '家居：滤芯该换了', '出行：北京差旅行李还没勾完'],
+      lines: [`穿搭：${store.suggestion.title}`, mealPick ? `饮食：热量还剩 ${kcalGap} kcal，蛋白质还差 ${proteinGap} g，可以加一份${mealPick.name}。` : '饮食：热量和蛋白质已达标', '家居：滤芯该换了', '出行：北京差旅行李还没勾完'],
       href: '/',
       label: '回到概览',
     });
