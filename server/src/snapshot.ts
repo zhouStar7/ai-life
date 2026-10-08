@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { DEFAULT_HA_BASE } from './adapters/home-assistant.js';
+import { readSceneBook } from './homeLink.js';
 import { readJson } from './ids.js';
 import { PAST_TREND } from './seedData.js';
 
@@ -72,6 +73,8 @@ export async function readSnapshot(db: PrismaClient) {
       configured: Boolean(profile.haToken),
       baseUrl: profile.haBase || DEFAULT_HA_BASE,
       connected: liveHome,
+      sceneCatalog: readSceneBook(session.haScenes).catalog,
+      sceneBindings: readSceneBook(session.haScenes).bindings,
     },
     spending: {
       monthTotal: total,
