@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useStore } from '../store';
-import { ROOMS, SCENES, type Room, type SceneName } from '../types';
+import { SCENES, type SceneName } from '../types';
 import { Empty, SpendCard } from '../components/ui';
 
 export function HomePage() {
   const store = useStore();
-  const [room, setRoom] = useState<'全部' | Room>('全部');
+  const [room, setRoom] = useState('全部');
+  const roomOptions = [...new Set(store.devices.map((device) => device.room).filter((item) => item && item !== '未分区')), '未分区'];
   const visible = store.devices.filter((device) => room === '全部' || device.room === room);
   const online = store.devices.filter((device) => !device.offline).length;
   const openAlerts = store.alerts.filter((alert) => !alert.handled);
@@ -36,14 +37,29 @@ export function HomePage() {
             <h2>场景</h2>
             <div className="scene-row" style={{ marginTop: 10 }}>
               {SCENES.map((scene) => (
-                <button type="button" key={scene} data-testid={`scene-${scene}`} className={store.activeScene === scene ? 'pill active' : 'pill'} onClick={() => store.applyScene(scene as SceneName)}>{scene}</button>
+                <div key={scene} className="scene-bind">
+                  <button type="button" data-testid={`scene-${scene}`} className={store.activeScene === scene ? 'pill active' : 'pill'} onClick={() => store.applyScene(scene as SceneName)}>{scene}</button>
+                  {store.home.connected ? (
+                    <select
+                      className="select"
+                      aria-label={`${scene}的绑定`}
+                      value={store.home.sceneBindings[scene] ?? 'devices'}
+                      onChange={(event) => store.bindScene(scene, event.target.value)}
+                    >
+                      <option value="devices">按设备动作</option>
+                      {store.home.sceneCatalog.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
               ))}
             </div>
           </section>
           <div className="pills">
             <button type="button" className={room === '全部' ? 'pill active' : 'pill'} onClick={() => setRoom('全部')}>全部</button>
-            {ROOMS.map((item) => (
-              <button type="button" key={item} className={room === item ? 'pill active' : 'pill'} onClick={() => setRoom(item)}>{item}</button>
+            {roomOptions.map((item) => (
+              <button type="button" key={item} data-testid={`room-${item}`} className={room === item ? 'pill active' : 'pill'} onClick={() => setRoom(item)}>{item}</button>
             ))}
           </div>
           {visible.length === 0 ? (
