@@ -54,6 +54,7 @@ model Meal {
   slot    String
   name    String
   time    String
+  date    String @default("2026-09-22")
   kcal    Int
   protein Int
   carb    Int
