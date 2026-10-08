@@ -84,13 +84,21 @@ export interface ItineraryDraft {
   tickets: TripTicket[];
   timeline: TripNode[];
   packing: string[];
+  source?: 'rules' | 'model';
 }
 
 export interface TripChain {
   trip: { id: string; title: string };
   outfit: { title: string; reason: string; itemIds: string[] };
   scene: { name: string; via: 'local' | 'home-assistant' };
-  budget: { spent: number; budget: number; remain: number };
+  meal: { name: string; slot: string; reason: string };
+  budget: { spent: number; budget: number; remain: number; trip: number };
+}
+
+export interface PackingTemplate {
+  id: string;
+  name: string;
+  items: string[];
 }
 
 export interface Device {
@@ -148,6 +156,7 @@ export interface Expense {
   date: string;
   merchant: string;
   note: string;
+  tripId?: string;
 }
 
 export interface BillDraft {

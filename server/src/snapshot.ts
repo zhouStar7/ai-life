@@ -4,7 +4,7 @@ import { readJson } from './ids.js';
 import { PAST_TREND } from './seedData.js';
 
 export async function readSnapshot(db: PrismaClient) {
-  const [items, outfits, meals, recipes, target, devices, alerts, trips, expenses, budget, notice, session, profile] = await Promise.all([
+  const [items, outfits, meals, recipes, target, devices, alerts, trips, expenses, budget, notice, session, profile, packingTemplates] = await Promise.all([
     db.wardrobeItem.findMany({ orderBy: { createdAt: 'desc' } }),
     db.outfit.findMany(),
     db.meal.findMany(),
@@ -18,6 +18,7 @@ export async function readSnapshot(db: PrismaClient) {
     db.notice.findUniqueOrThrow({ where: { id: 'local' } }),
     db.sessionState.findUniqueOrThrow({ where: { id: 'local' } }),
     db.profile.findUniqueOrThrow({ where: { id: 'local' } }),
+    db.packingTemplate.findMany({ orderBy: { name: 'asc' } }),
   ]);
 
   const liveHome = session.haConnected && Boolean(profile.haToken);
@@ -53,6 +54,11 @@ export async function readSnapshot(db: PrismaClient) {
       packing: readJson(trip.packing, []),
     })),
     expenses,
+    packingTemplates: packingTemplates.map((template) => ({
+      id: template.id,
+      name: template.name,
+      items: readJson<string[]>(template.items, []),
+    })),
     budgets: { total: budget.total, 衣: budget.cloth, 食: budget.food, 住: budget.home, 行: budget.trip },
     notices: { outfit: notice.outfit, budget: notice.budget, device: notice.device },
     suggestionIndex: session.suggestionIndex,

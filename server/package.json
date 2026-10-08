@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "mkdir -p data && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" prisma db push && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" tsx watch src/index.ts",
     "start": "mkdir -p data && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" prisma db push && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" tsx src/index.ts",
-    "test": "tsx --test src/phase1.test.ts src/phase2.test.ts src/phase3.test.ts",
+    "test": "tsx --test src/phase1.test.ts src/phase2.test.ts src/phase3.test.ts src/travel.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

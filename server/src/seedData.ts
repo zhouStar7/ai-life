@@ -106,8 +106,8 @@ export const SEED_TRIPS = [
 ];
 
 export const SEED_EXPENSES = [
-  { id: 'e1', tag: '行', amount: 1680, date: '2026-09-01', merchant: '航旅纵横', note: '北京机票' },
-  { id: 'e2', tag: '行', amount: 980, date: '2026-09-01', merchant: '国贸酒店', note: '两晚住宿' },
+  { id: 'e1', tag: '行', amount: 1680, date: '2026-09-01', merchant: '航旅纵横', note: '北京机票', tripId: 't-bj' },
+  { id: 'e2', tag: '行', amount: 980, date: '2026-09-01', merchant: '国贸酒店', note: '两晚住宿', tripId: 't-bj' },
   { id: 'e3', tag: '衣', amount: 399, date: '2026-09-02', merchant: '优衣库', note: '白色牛津衬衫' },
   { id: 'e4', tag: '食', amount: 186, date: '2026-09-03', merchant: '盒马', note: '一周蔬菜' },
   { id: 'e5', tag: '住', amount: 320, date: '2026-09-04', merchant: '国家电网', note: '电费' },

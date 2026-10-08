@@ -29,6 +29,7 @@ import type {
   Meal,
   NoticePrefs,
   NutritionTarget,
+  PackingTemplate,
   Outfit,
   Recipe,
   SceneName,
@@ -101,10 +102,16 @@ interface StoreValue {
   parseTrip: (text: string) => Promise<ItineraryDraft | null>;
   importTrip: (draft: ItineraryDraft) => Promise<boolean>;
   runChain: (tripId: string) => Promise<TripChain | null>;
+  adoptTripMeal: (tripId: string, name: string) => void;
+  addPackingLine: (tripId: string, text: string) => void;
+  savePackingTemplate: (tripId: string, name: string) => void;
+  applyPackingTemplate: (tripId: string, templateId: string) => void;
+  addTripExpense: (tripId: string, input: { amount: number; merchant: string; kind: '票务' | '食宿' }) => void;
   weatherLabel: string;
   online: boolean;
   model: { configured: boolean; baseUrl: string; model: string };
   home: HomeLink;
+  packingTemplates: PackingTemplate[];
   suggestion: { title: string; reason: string; itemIds: string[] };
 }
 
@@ -130,6 +137,7 @@ type RemoteSnapshot = {
   adoptedTips: string[];
   model: { configured: boolean; baseUrl: string; model: string };
   home: HomeLink;
+  packingTemplates?: PackingTemplate[];
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -188,6 +196,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(false);
   const [model, setModelState] = useState({ configured: false, baseUrl: '', model: '' });
   const [home, setHomeState] = useState<HomeLink>({ configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false });
+  const [packingTemplates, setPackingTemplates] = useState<PackingTemplate[]>([]);
   const sourceRef = useRef<'api' | 'memory'>('memory');
 
   function applyRemote(snapshot: RemoteSnapshot) {
@@ -212,6 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setAdoptedTips(snapshot.adoptedTips);
     setModelState(snapshot.model);
     setHomeState(snapshot.home ?? { configured: false, baseUrl: 'http://192.168.0.111:8123', connected: false });
+    setPackingTemplates(snapshot.packingTemplates ?? []);
   }
 
   useEffect(() => {
@@ -310,6 +320,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     online,
     model,
     home,
+    packingTemplates,
     addItem: (input) => {
       void (async () => {
         if (await commit('/api/items', { method: 'POST', body: JSON.stringify(input) })) {
@@ -789,6 +800,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         toast('这趟行程没有串起来');
         return null;
       }
+    },
+    adoptTripMeal: (tripId, name) => {
+      void (async () => {
+        if (await commit(`/api/trips/${tripId}/meal`, { method: 'POST', body: JSON.stringify({ name }) })) {
+          toast(`已记下「${name}」`);
+          return;
+        }
+        if (!meals.some((meal) => meal.name === name)) {
+          setMeals((current) => [...current, { id: uid('m'), slot: '午餐', name, time: '12:30', kcal: 420, protein: 42, carb: 18, fat: 16 }]);
+        }
+        toast(`已记下「${name}」`);
+      })();
+    },
+    addPackingLine: (tripId, text) => {
+      void (async () => {
+        if (await commit(`/api/trips/${tripId}/packing`, { method: 'POST', body: JSON.stringify({ text }) })) return;
+        setTrips((current) => current.map((trip) => (
+          trip.id === tripId && !trip.packing.some((item) => item.text === text)
+            ? { ...trip, packing: [...trip.packing, { id: uid('p'), text, done: false }] }
+            : trip
+        )));
+      })();
+    },
+    savePackingTemplate: (tripId, name) => {
+      void (async () => {
+        if (await commit('/api/packing-templates', { method: 'POST', body: JSON.stringify({ tripId, name }) })) {
+          toast(`已保存行李模板「${name}」`);
+          return;
+        }
+        const trip = trips.find((item) => item.id === tripId);
+        if (!trip) return;
+        setPackingTemplates((current) => [...current, { id: uid('pack'), name, items: trip.packing.map((item) => item.text) }]);
+        toast(`已保存行李模板「${name}」`);
+      })();
+    },
+    applyPackingTemplate: (tripId, templateId) => {
+      void (async () => {
+        if (await commit(`/api/trips/${tripId}/packing-template`, { method: 'POST', body: JSON.stringify({ templateId }) })) return;
+        const template = packingTemplates.find((item) => item.id === templateId);
+        if (!template) return;
+        setTrips((current) => current.map((trip) => {
+          if (trip.id !== tripId) return trip;
+          const owned = new Set(trip.packing.map((item) => item.text));
+          const extra = template.items.filter((text) => !owned.has(text)).map((text) => ({ id: uid('p'), text, done: false }));
+          return { ...trip, packing: [...trip.packing, ...extra] };
+        }));
+      })();
+    },
+    addTripExpense: (tripId, input) => {
+      void (async () => {
+        if (await commit(`/api/trips/${tripId}/expenses`, { method: 'POST', body: JSON.stringify(input) })) {
+          toast('已记到这趟行程');
+          return;
+        }
+        setExpenses((current) => [{ id: uid('e'), tag: '行', amount: input.amount, date: '2026-09-22', merchant: input.merchant, note: input.kind, tripId }, ...current]);
+        toast('已记到这趟行程');
+      })();
     },
     adoptActions: (actions, key) => {
       void (async () => {
