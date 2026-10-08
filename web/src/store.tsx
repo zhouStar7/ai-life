@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 import { api } from './api/client';
 import { loadSnapshot, saveSnapshot } from './api/snapshot';
+import { DIET_TODAY, estimateMeal as estimateMealText, pickRecipe, type MealDraft } from './dietPlan';
 import { itemNames, uid } from './format';
 import {
   SEED_ALERTS,
@@ -70,8 +71,10 @@ interface StoreValue {
   refreshSuggestion: () => void;
   toggleWeather: () => void;
   addMeal: (input: Omit<Meal, 'id'>) => void;
+  estimateMeal: (text: string) => Promise<MealDraft | null>;
   updateMeal: (meal: Meal) => void;
   removeMeal: (id: string) => void;
+  addRecipe: (input: Omit<Recipe, 'id'>) => void;
   applyRecipe: (id: string) => void;
   setTargets: (targets: NutritionTarget) => void;
   toggleDevice: (id: string) => void;
@@ -469,9 +472,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           toast(`已记下${input.slot}`);
           return;
         }
-        setMeals((current) => [...current, { ...input, id: uid('m') }]);
+        setMeals((current) => [...current, { ...input, id: uid('m'), date: input.date || DIET_TODAY }]);
         toast(`已记下${input.slot}`);
       })();
+    },
+    estimateMeal: async (text) => {
+      const trimmed = text.trim();
+      if (!trimmed) return null;
+      if (sourceRef.current === 'api') {
+        try {
+          const body = await api<{ draft: MealDraft }>('/api/meals/estimate', { method: 'POST', body: JSON.stringify({ text: trimmed }) });
+          return body.draft;
+        } catch {
+          sourceRef.current = 'memory';
+          setOnline(false);
+        }
+      }
+      return estimateMealText(trimmed, recipes);
     },
     updateMeal: (meal) => {
       void (async () => {
@@ -493,6 +510,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         toast('已删除这条餐次');
       })();
     },
+    addRecipe: (input) => {
+      const name = input.name.trim();
+      if (!name) return;
+      const tags = input.tags.map((tag) => tag.trim()).filter(Boolean);
+      void (async () => {
+        if (await commit('/api/recipes', { method: 'POST', body: JSON.stringify({ ...input, name, tags }) })) {
+          toast(`已加入食谱「${name}」`);
+          return;
+        }
+        setRecipes((current) => [{ ...input, id: uid('r'), name, tags }, ...current]);
+        toast(`已加入食谱「${name}」`);
+      })();
+    },
     applyRecipe: (id) => {
       const recipe = recipes.find((item) => item.id === id);
       if (!recipe) return;
@@ -505,7 +535,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         setMeals((current) => [
           ...current,
-          { id: uid('m'), slot: recipe.slot, name: recipe.name, time, kcal: recipe.kcal, protein: recipe.protein, carb: recipe.carb, fat: recipe.fat },
+          { id: uid('m'), slot: recipe.slot, name: recipe.name, time, date: DIET_TODAY, kcal: recipe.kcal, protein: recipe.protein, carb: recipe.carb, fat: recipe.fat },
         ]);
         toast(`已把「${recipe.name}」加入${recipe.slot}`);
       })();
@@ -807,19 +837,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })();
     },
     adoptProteinTip: () => {
+      const picked = pickRecipe(recipes, meals, targets);
+      if (!picked) return;
       void (async () => {
         if (await commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'protein' }) })) {
-          toast('已按建议补上鸡胸肉沙拉');
+          toast(`已按建议补上${picked.name}`);
           return;
         }
-        if (!adoptedTips.includes('protein') && !meals.some((meal) => meal.name === '鸡胸肉沙拉')) {
+        if (!meals.some((meal) => meal.name === picked.name)) {
           setMeals((current) => [
             ...current,
-            { id: uid('m'), slot: '晚餐', name: '鸡胸肉沙拉', time: '18:30', kcal: 420, protein: 42, carb: 18, fat: 16 },
+            { id: uid('m'), slot: picked.slot, name: picked.name, time: '18:30', date: DIET_TODAY, kcal: picked.kcal, protein: picked.protein, carb: picked.carb, fat: picked.fat },
           ]);
         }
         markTip('protein');
-        toast('已按建议补上鸡胸肉沙拉');
+        toast(`已按建议补上${picked.name}`);
       })();
     },
     adoptFilterTip: () => {
@@ -851,7 +883,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setMeals((current) => (
         current.some((meal) => meal.name === '鸡胸温蔬藜麦')
           ? current
-          : [...current, { id: 'm-cross', slot: '午餐', name: '鸡胸温蔬藜麦', time: '12:40', kcal: 550, protein: 45, carb: 48, fat: 14 }]
+          : [...current, { id: 'm-cross', slot: '午餐', name: '鸡胸温蔬藜麦', time: '12:40', date: DIET_TODAY, kcal: 550, protein: 45, carb: 48, fat: 14 }]
       ));
       markTip('protein');
       applyScene('离家', true);

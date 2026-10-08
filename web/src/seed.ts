@@ -50,9 +50,9 @@ export const SUGGESTIONS: OutfitSuggestion[] = [
 ];
 
 export const SEED_MEALS: Meal[] = [
-  { id: 'm1', slot: '早餐', name: '燕麦酸奶碗', time: '08:20', kcal: 360, protein: 18, carb: 52, fat: 12 },
-  { id: 'm2', slot: '午餐', name: '香煎鸡胸沙拉', time: '12:30', kcal: 480, protein: 40, carb: 48, fat: 18 },
-  { id: 'm3', slot: '加餐', name: '希腊酸奶', time: '16:00', kcal: 140, protein: 10, carb: 45, fat: 12 },
+  { id: 'm1', slot: '早餐', name: '燕麦酸奶碗', time: '08:20', date: '2026-09-22', kcal: 360, protein: 18, carb: 52, fat: 12 },
+  { id: 'm2', slot: '午餐', name: '香煎鸡胸沙拉', time: '12:30', date: '2026-09-22', kcal: 480, protein: 40, carb: 48, fat: 18 },
+  { id: 'm3', slot: '加餐', name: '希腊酸奶', time: '16:00', date: '2026-09-22', kcal: 140, protein: 10, carb: 45, fat: 12 },
 ];
 
 export const SEED_RECIPES: Recipe[] = [
@@ -63,15 +63,6 @@ export const SEED_RECIPES: Recipe[] = [
 ];
 
 export const SEED_TARGETS: NutritionTarget = { kcal: 1800, protein: 120, carb: 200, fat: 60 };
-
-export const WEEK_HISTORY = [
-  { label: '16', kcal: 1510 },
-  { label: '17', kcal: 1720 },
-  { label: '18', kcal: 1680 },
-  { label: '19', kcal: 1490 },
-  { label: '20', kcal: 1830 },
-  { label: '21', kcal: 1600 },
-];
 
 export const SEED_DEVICES: Device[] = [
   { id: 'd1', name: '客厅主灯', room: '客厅', kind: '灯', on: true, paramLabel: '亮度', paramValue: '70%' },
