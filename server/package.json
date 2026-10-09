@@ -1,0 +1,22 @@
+{
+  "name": "ai-life-server",
+  "private": true,
+  "version": "1.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "mkdir -p data && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" prisma db push && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" tsx watch src/index.ts",
+    "start": "mkdir -p data && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" prisma db push && DATABASE_URL=\"file:$PWD/data/ai-life.sqlite\" tsx src/index.ts",
+    "test": "tsx --test src/phase1.test.ts src/phase2.test.ts src/phase3.test.ts src/wardrobe.test.ts src/diet.test.ts src/home.test.ts src/travel.test.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "@prisma/client": "^6.16.3",
+    "hono": "^4.9.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "prisma": "^6.16.3",
+    "tsx": "^4.20.5"
+  }
+}
