@@ -19,9 +19,9 @@ export function parseItinerary(text: string): ItineraryDraft | null {
   let transport = '';
   let destination = '';
 
-  const flight = source.match(/(\d{1,2})月(\d{1,2})日\s*([A-Z]{2}\d{3,4})\s*([^\s，,。]{2,20}?) *(\d{1,2}:\d{2})\s*(?:起飞|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
+  const flight = source.match(/(\d{1,2})月(\d{1,2})日\s*([A-Z]{2}\d{3,4})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:起飞|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
   const flightMail = source.match(/航班\s*([A-Z]{2}\d{3,4})[\s\S]*?出发[:：]\s*(\d{4})-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)[\s\S]*?到达[:：]\s*\d{4}-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)/);
-  const train = source.match(/(\d{1,2})月(\d{1,2})日\s*([GDC]\d{2,5})\s*([^\s，,。]{2,20}?) *(\d{1,2}:\d{2})\s*(?:开|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
+  const train = source.match(/(\d{1,2})月(\d{1,2})日\s*([GDC]\d{2,5})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:开|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
 
   if (flight) {
     const [, month, day, code, from, depart, arrive, to] = flight;
@@ -49,7 +49,7 @@ export function parseItinerary(text: string): ItineraryDraft | null {
     timeline.push({ time: clock(month, day, arrive), title: '抵达', detail: to });
   }
 
-  const hotel = source.match(/([一-龥A-Za-z0-9]{2,24}酒店)\s*(\d{1,2})月(\d{1,2})日入住[，,\s]*(\d{1,2})月(\d{1,2})日(?:离店|退房)/);
+  const hotel = source.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24}酒店)\s*(\d{1,2})月(\d{1,2})日入住[，,\s]*(\d{1,2})月(\d{1,2})日(?:离店|退房)/);
   const hotelMail = source.match(/酒店[:：]\s*([^\n]{2,30})[\s\S]*?入住[:：]\s*(\d{1,2})月(\d{1,2})日[\s\S]*?离店[:：]\s*(\d{1,2})月(\d{1,2})日/);
   if (hotel) {
     const [, name, inMonth, inDay, outMonth, outDay] = hotel;
@@ -111,8 +111,8 @@ function loosen(
   setTransport: (value: string) => void,
   setDestination: (value: string) => void,
 ) {
-  const flight = source.match(/([A-Z]{2}\d{3,4})[\s\S]{0,40}?(\d{1,2})月(\d{1,2})日[\s\S]{0,30}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?) *(?:起飞|出发)[\s\S]{0,20}?(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
-  const train = source.match(/(?:车次\s*)?([GDC]\d{2,5})[\s\S]{0,30}?(\d{1,2})月(\d{1,2})日[\s\S]{0,24}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?) *(?:开|出发)[\s\S]{0,16}?(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
+  const flight = source.match(/([A-Z]{2}\d{3,4})[\s\S]{0,40}?(\d{1,2})月(\d{1,2})日[\s\S]{0,30}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?)\s*(?:起飞|出发)[\s\S]{0,20}?(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
+  const train = source.match(/(?:车次\s*)?([GDC]\d{2,5})[\s\S]{0,30}?(\d{1,2})月(\d{1,2})日[\s\S]{0,24}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?)\s*(?:开|出发)[\s\S]{0,16}?(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
   const dated = source.match(/(\d{4})[-/.](\d{2})[-/.](\d{2})\s+(\d{1,2}:\d{2})\s+(\S+)\s*(?:起飞|出发|开)[\s\S]{0,40}?(\d{1,2}:\d{2})\s*(?:抵达|到达|到)\s*(\S+)/);
   const picked = flight
     ? { kind: '飞机' as const, code: flight[1], month: flight[2], day: flight[3], depart: flight[4], from: flight[5], arrive: flight[6], to: flight[7] }
@@ -137,7 +137,7 @@ function loosenHotel(
   days: string[],
   setDestination: (value: string) => void,
 ) {
-  const hotel = source.match(/([一-龥A-Za-z0-9]{2,24}酒店)[\s\S]{0,24}?(\d{1,2})月(\d{1,2})日\s*(?:入住|到店)[\s\S]{0,24}?(\d{1,2})月(\d{1,2})日\s*(?:离店|退房|离开)/);
+  const hotel = source.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24}酒店)[\s\S]{0,24}?(\d{1,2})月(\d{1,2})日\s*(?:入住|到店)[\s\S]{0,24}?(\d{1,2})月(\d{1,2})日\s*(?:离店|退房|离开)/);
   if (!hotel) return;
   const [, name, inMonth, inDay, outMonth, outDay] = hotel;
   tickets.push({ label: name, status: /已确认|确认|预订/.test(source) ? '已确认' : '待确认' });
