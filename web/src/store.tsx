@@ -863,7 +863,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (!meals.some((meal) => meal.name === name)) {
-          setMeals((current) => [...current, { id: uid('m'), slot: '午餐', name, time: '12:30', kcal: 420, protein: 42, carb: 18, fat: 16 }]);
+          setMeals((current) => [...current, { id: uid('m'), slot: '午餐', name, time: '12:30', date: DIET_TODAY, kcal: 420, protein: 42, carb: 18, fat: 16 }]);
         }
         toast(`已记下「${name}」`);
       })();
