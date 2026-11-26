@@ -7,13 +7,15 @@ import { PrismaClient } from '@prisma/client';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from './app.js';
+import { shiftDate, todayIso } from './calendar.js';
 import { estimateMeal, pickRecipe, weekFromMeals } from './dietPlan.js';
 import { SEED_MEALS, SEED_RECIPES } from './seedData.js';
 import { seedIfEmpty } from './seed.js';
+import { sessionCookie } from './testSession.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'ai-life-diet-'));
 process.env.DATABASE_URL = `file:${path.join(dir, 'test.sqlite')}`;
-execSync('npx prisma db push --skip-generate', {
+execSync('./node_modules/.bin/prisma db push --skip-generate', {
   cwd: path.join(import.meta.dirname, '..'),
   env: process.env,
   stdio: 'pipe',
@@ -35,10 +37,12 @@ after(async () => {
   await db.$disconnect();
 });
 
+let cookie = '';
 async function json(pathname: string, init?: RequestInit) {
+  if (!cookie) cookie = await sessionCookie(base);
   const response = await fetch(`${base}${pathname}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'content-type': 'application/json', cookie, ...(init?.headers ?? {}) },
   });
   const body = await response.json();
   return { status: response.status, body };
@@ -84,11 +88,11 @@ test('recipe suggestion follows calorie and protein gaps', () => {
 });
 
 test('seven day intake uses stored meals', () => {
-  const week = weekFromMeals(SEED_MEALS);
+  const week = weekFromMeals(SEED_MEALS, '2026-09-22');
   assert.deepEqual(week.map((day) => day.label), ['16', '17', '18', '19', '20', '21', '22']);
   assert.deepEqual(week.slice(0, 6).map((day) => day.kcal), [0, 0, 0, 0, 0, 0]);
   assert.equal(week[6].kcal, 980);
-  const withYesterday = weekFromMeals([...SEED_MEALS, { date: '2026-09-21', kcal: 100, protein: 0, carb: 0, fat: 0 }]);
+  const withYesterday = weekFromMeals([...SEED_MEALS, { date: '2026-09-21', kcal: 100, protein: 0, carb: 0, fat: 0 }], '2026-09-22');
   assert.equal(withYesterday[5].kcal, 100);
   assert.equal(withYesterday[6].kcal, 980);
 });
@@ -101,15 +105,17 @@ test('estimate, confirm, dated meal and custom recipe stay on the books', async 
 
   const saved = await json('/api/meals', { method: 'POST', body: JSON.stringify(estimate.body.draft) });
   assert.equal(saved.status, 200);
-  assert.ok(saved.body.snapshot.meals.some((meal: { name: string; date: string }) => meal.name === '中午一碗牛肉面' && meal.date === '2026-09-22'));
+  const today = todayIso();
+  assert.ok(saved.body.snapshot.meals.some((meal: { name: string; date: string }) => meal.name === '中午一碗牛肉面' && meal.date === today));
 
+  const yesterdayDate = shiftDate(today, -1);
   const yesterday = await json('/api/meals', {
     method: 'POST',
-    body: JSON.stringify({ slot: '午餐', name: '昨天的米饭', time: '12:00', date: '2026-09-21', kcal: 230, protein: 4, carb: 50, fat: 1 }),
+    body: JSON.stringify({ slot: '午餐', name: '昨天的米饭', time: '12:00', date: yesterdayDate, kcal: 230, protein: 4, carb: 50, fat: 1 }),
   });
   const week = weekFromMeals(yesterday.body.snapshot.meals);
-  assert.equal(week.find((day) => day.date === '2026-09-21')?.kcal, 230);
-  assert.equal(week.find((day) => day.date === '2026-09-22')?.kcal, 980 + 550);
+  assert.equal(week.find((day) => day.date === yesterdayDate)?.kcal, 230);
+  assert.equal(week.find((day) => day.date === today)?.kcal, 550);
 
   const blank = await json('/api/meals/estimate', { method: 'POST', body: JSON.stringify({ text: '   ' }) });
   assert.equal(blank.status, 400);

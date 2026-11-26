@@ -14,7 +14,7 @@ export const SCENES = ['回家', '离家', '睡眠', '影院'] as const;
 export type SceneName = (typeof SCENES)[number];
 
 export type AlertLevel = '高' | '中' | '低';
-export type TripStatus = '进行中' | '即将开始';
+export type TripStatus = '进行中' | '即将开始' | '已结束' | '日期待定';
 
 export interface WardrobeItem {
   id: string;
@@ -25,6 +25,8 @@ export interface WardrobeItem {
   occasion: string;
   wears: number;
   createdAt: string;
+  cover?: string;
+  price?: number | null;
 }
 
 export interface Outfit {
@@ -85,6 +87,8 @@ export interface HomeLink {
 }
 
 export interface ItineraryDraft {
+  startDate?: string | null;
+  endDate?: string | null;
   title: string;
   status: TripStatus;
   transport: string;
@@ -146,6 +150,8 @@ export interface TripNode {
 }
 
 export interface Trip {
+  startDate?: string | null;
+  endDate?: string | null;
   id: string;
   title: string;
   status: TripStatus;
@@ -173,14 +179,19 @@ export interface BillDraft {
   date: string;
   merchant: string;
   note: string;
+  sourceId?: string;
+  fingerprint?: string;
+  duplicate?: boolean;
 }
 
 export interface ClothingDraft {
   name: string;
+  price?: number | null;
   category: WardrobeCategory;
   season: string;
   color: string;
   occasion: string;
+  cover?: string;
 }
 
 export interface Budgets {
@@ -200,4 +211,11 @@ export interface NoticePrefs {
 export interface Toast {
   id: string;
   message: string;
+}
+
+export interface SpendingSummary {
+  month: string;
+  monthTotal: number;
+  byTag: Record<SpendTag, number>;
+  trend: { month: string; label: string; amount: number }[];
 }

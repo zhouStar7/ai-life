@@ -9,6 +9,8 @@ export function SettingsPage() {
   const [draft, setDraft] = useState<Budgets>(store.budgets);
   const [modelDraft, setModelDraft] = useState({ baseUrl: '', model: '', apiKey: '' });
   const [homeDraft, setHomeDraft] = useState({ baseUrl: '', token: '' });
+  const [memberDraft, setMemberDraft] = useState({ username: '', name: '', password: '' });
+  const [memberError, setMemberError] = useState('');
   const modelBase = modelDraft.baseUrl || store.model.baseUrl;
   const modelName = modelDraft.model || store.model.model;
   const moduleSum = SPEND_TAGS.reduce((sum, tag) => sum + (Number(draft[tag]) || 0), 0);
@@ -22,9 +24,32 @@ export function SettingsPage() {
       <header className="page-head">
         <div>
           <h1 className="display" style={{ fontSize: 32 }}>设置</h1>
-          <p className="muted">预算和数据来源留在这里。</p>
         </div>
       </header>
+      <article className="card">
+        <h2>家庭成员</h2>
+        <p className="muted">当前是 {store.member?.name}（{store.member?.username}）。新成员有自己的衣橱、饮食、行程和账单。家居设备和模型连接全家共用。</p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void store.addMember(memberDraft).then((message) => {
+              setMemberError(message ?? '');
+              if (!message) setMemberDraft({ username: '', name: '', password: '' });
+            });
+          }}
+          style={{ marginTop: 12 }}
+        >
+          <div className="form-grid">
+            <Field label="用户名"><input value={memberDraft.username} onChange={(event) => setMemberDraft({ ...memberDraft, username: event.target.value })} /></Field>
+            <Field label="显示名"><input value={memberDraft.name} onChange={(event) => setMemberDraft({ ...memberDraft, name: event.target.value })} /></Field>
+            <Field label="密码"><input type="password" value={memberDraft.password} onChange={(event) => setMemberDraft({ ...memberDraft, password: event.target.value })} /></Field>
+          </div>
+          {memberError ? <p className="note">{memberError}</p> : null}
+          <div className="modal-actions">
+            <button type="submit" className="btn">添加成员</button>
+          </div>
+        </form>
+      </article>
       <article className="card">
         <h2>月预算</h2>
         <p className="muted">支出统计和各模块预算条会读这里的数字。</p>

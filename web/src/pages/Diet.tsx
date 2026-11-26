@@ -102,7 +102,7 @@ export function DietPage() {
               <Empty title="还没设营养目标" desc="先定一个每日热量，进度才有对照。" action={<button type="button" className="btn" onClick={() => setTargetOpen(true)}>设置目标</button>} />
             ) : (
               <>
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '8px 0 12px' }}>
+                <div className="split">
                   <div className="ring-wrap" aria-hidden="true">
                     <svg viewBox="0 0 100 100">
                       <circle cx="50" cy="50" r="42" fill="none" stroke="#eee2cf" strokeWidth="10" />
@@ -135,7 +135,7 @@ export function DietPage() {
             )}
           </article>
           <article className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="section-head">
               <h2>食谱库</h2>
               <button type="button" className="btn-text" data-testid="add-recipe" onClick={() => setRecipeOpen(true)}>添加食谱</button>
             </div>

@@ -2,21 +2,23 @@ import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { DEFAULT_HA_BASE } from '../adapters/home-assistant.js';
 import { readWeather } from '../adapters/weather.js';
-import { readSnapshot } from '../snapshot.js';
+import { memberOf } from '../auth.js';
+import { readMutationSnapshot, readSnapshot } from '../snapshot.js';
 
 export function registerSettings(app: Hono, db: PrismaClient) {
   app.put('/api/notices', async (c) => {
     const body = await c.req.json();
-    const current = await db.notice.findUniqueOrThrow({ where: { id: 'local' } });
+    const memberId = memberOf(c);
+    const current = await db.notice.findUniqueOrThrow({ where: { memberId } });
     await db.notice.update({
-      where: { id: 'local' },
+      where: { memberId },
       data: {
         outfit: typeof body.outfit === 'boolean' ? body.outfit : current.outfit,
         budget: typeof body.budget === 'boolean' ? body.budget : current.budget,
         device: typeof body.device === 'boolean' ? body.device : current.device,
       },
     });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.put('/api/model', async (c) => {
@@ -30,7 +32,7 @@ export function registerSettings(app: Hono, db: PrismaClient) {
         modelKey: typeof body.apiKey === 'string' && body.apiKey ? body.apiKey : current.modelKey,
       },
     });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.put('/api/home', async (c) => {
@@ -42,7 +44,7 @@ export function registerSettings(app: Hono, db: PrismaClient) {
     if (haBase !== current.haBase || (typeof body.token === 'string' && body.token)) {
       await db.sessionState.update({ where: { id: 'local' }, data: { haConnected: false, haScenes: '{}' } });
     }
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/weather/refresh', async (c) => {
@@ -52,6 +54,6 @@ export function registerSettings(app: Hono, db: PrismaClient) {
       where: { id: 'local' },
       data: { weatherOn: weather.weatherOn, weatherLabel: weather.weatherLabel },
     });
-    return c.json({ snapshot: await readSnapshot(db), profile: profile.name });
+    return c.json({ snapshot: await readMutationSnapshot(db, c), profile: profile.name });
   });
 }

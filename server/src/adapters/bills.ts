@@ -1,4 +1,6 @@
+import { todayIso } from '../calendar.js';
 import { extractJson } from '../json.js';
+import { billFingerprint, fromCents, toCents } from '../money.js';
 import { complete, type ModelConfig } from './model.js';
 
 export const TAGS = ['衣', '食', '住', '行'] as const;
@@ -10,6 +12,9 @@ export type BillDraft = {
   date: string;
   merchant: string;
   note: string;
+  sourceId?: string;
+  fingerprint?: string;
+  duplicate?: boolean;
 };
 
 const RULES: { tag: SpendTag; words: string[] }[] = [
@@ -19,7 +24,9 @@ const RULES: { tag: SpendTag; words: string[] }[] = [
   { tag: '食', words: ['餐', '外卖', '美团', '饿了么', '菜', '咖啡', '饭', '食', '超市', '星巴克', '买菜', '餐饮', '美食', '盒马', '面包'] },
 ];
 
-const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'direction' | 'tag' | 'kind'> = {
+type CsvField = 'date' | 'merchant' | 'note' | 'amount' | 'direction' | 'tag' | 'kind' | 'source' | 'merchantOrder';
+
+const HEADER: Record<string, CsvField> = {
   交易时间: 'date',
   日期: 'date',
   date: 'date',
@@ -40,6 +47,8 @@ const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'directio
   交易分类: 'kind',
   交易类型: 'kind',
   tag: 'tag',
+  交易单号: 'source',
+  商户单号: 'merchantOrder',
 };
 
 const PROMPT = '读这张账单截图，只返回 JSON：{"rows":[{"date":"2026-09-18","merchant":"","amount":1,"note":"","tag":"食","direction":"支出"}]}。tag 只能是衣、食、住、行。收入和退款不要放进行列。';
@@ -85,13 +94,14 @@ export function billsFromModel(content: string): BillDraft[] {
     const amount = normalizeAmount(row.amount);
     if (!merchant || amount <= 0) continue;
     const explicit = typeof row.tag === 'string' ? row.tag.trim() : '';
-    rows.push({
+    rows.push(finishDraft({
       tag: asTag(explicit) ?? classifySpend(`${merchant} ${note}`),
       amount,
       date: normalizeDate(typeof row.date === 'string' ? row.date : ''),
       merchant,
       note: note || '账单导入',
-    });
+      sourceId: typeof row.sourceId === 'string' ? row.sourceId.trim() : '',
+    }));
   }
   return rows;
 }
@@ -165,13 +175,19 @@ function rowFromCells(cells: string[], map: Record<number, (typeof HEADER)[strin
   const amount = normalizeAmount(picked.amount ?? '');
   if (!merchant || amount <= 0) return null;
   const blob = `${merchant} ${note} ${picked.kind ?? ''} ${picked.tag ?? ''}`;
-  return {
+  return finishDraft({
     tag: asTag(picked.tag ?? '') ?? classifySpend(blob),
     amount,
     date: normalizeDate(picked.date ?? ''),
     merchant,
     note: note || '账单导入',
-  };
+    sourceId: (picked.source || picked.merchantOrder || '').trim(),
+  });
+}
+
+function finishDraft(row: Omit<BillDraft, 'fingerprint' | 'duplicate'>): BillDraft {
+  const draft = { ...row, sourceId: row.sourceId || undefined };
+  return { ...draft, fingerprint: billFingerprint(draft) };
 }
 
 function asTag(value: string): SpendTag | null {
@@ -188,11 +204,11 @@ function normalizeAmount(value: unknown) {
   const cleaned = String(value ?? '').replace(/[¥￥,\s+]/g, '');
   const amount = Number(cleaned);
   if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return Math.round(amount);
+  return fromCents(toCents(amount));
 }
 
 function normalizeDate(value: string) {
   const match = value.match(/(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
-  if (!match) return '2026-09-22';
+  if (!match) return todayIso();
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
 }

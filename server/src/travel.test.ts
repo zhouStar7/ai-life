@@ -10,11 +10,12 @@ import assert from 'node:assert/strict';
 import { draftFromModel, parseItinerary } from './adapters/itinerary.js';
 import { createApp } from './app.js';
 import { seedIfEmpty } from './seed.js';
+import { sessionCookie } from './testSession.js';
 import { pickTravelOutfit } from './tripPlan.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'ai-life-travel-'));
 process.env.DATABASE_URL = `file:${path.join(dir, 'test.sqlite')}`;
-execSync('npx prisma db push --skip-generate', {
+execSync('./node_modules/.bin/prisma db push --skip-generate', {
   cwd: path.join(import.meta.dirname, '..'),
   env: process.env,
   stdio: 'pipe',
@@ -81,10 +82,12 @@ after(async () => {
   await db.$disconnect();
 });
 
+let cookie = '';
 async function json(pathname: string, init?: RequestInit) {
+  if (!cookie) cookie = await sessionCookie(base);
   const response = await fetch(`${base}${pathname}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'content-type': 'application/json', cookie, ...(init?.headers ?? {}) },
   });
   const body = await response.json();
   return { status: response.status, body };

@@ -6,13 +6,15 @@ import { serve } from '@hono/node-server';
 import { PrismaClient } from '@prisma/client';
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { CROSS_ACTIONS } from './agent/actions.js';
 import { createApp } from './app.js';
 import { readWeather } from './adapters/weather.js';
 import { seedIfEmpty } from './seed.js';
+import { sessionCookie } from './testSession.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'ai-life-'));
 process.env.DATABASE_URL = `file:${path.join(dir, 'test.sqlite')}`;
-execSync('npx prisma db push --skip-generate', {
+execSync('./node_modules/.bin/prisma db push --skip-generate', {
   cwd: path.join(import.meta.dirname, '..'),
   env: process.env,
   stdio: 'pipe',
@@ -35,10 +37,12 @@ after(async () => {
   await db.$disconnect();
 });
 
+let cookie = '';
 async function json(pathname: string, init?: RequestInit) {
+  if (!cookie) cookie = await sessionCookie(base);
   const response = await fetch(`${base}${pathname}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'content-type': 'application/json', cookie, ...(init?.headers ?? {}) },
   });
   const body = await response.json();
   return { status: response.status, body };
@@ -74,17 +78,25 @@ test('model plan adopts outfit, meal, away scene, packing and travel expense onc
   assert.equal(saved.body.snapshot.model.apiKey, undefined);
 
   const original = globalThis.fetch;
+  let calls = 0;
   globalThis.fetch = async (input, init) => {
     const url = String(input);
     if (url.includes('chat/completions')) {
+      calls += 1;
+      const content = calls === 1
+        ? '{"title":"模型方案","lines":["先说明今天可以怎么安排"],"href":"/","actions":[]}'
+        : JSON.stringify({ title: '模型方案', lines: ['穿搭已定', '午餐清淡', '离家', '行李', '差旅'], href: '/', actions: CROSS_ACTIONS });
       return new Response(JSON.stringify({
-        choices: [{ message: { content: '{"title":"模型方案","lines":["穿搭已定","午餐清淡","离家","行李","差旅"],"href":"/","actions":[]}' } }],
+        choices: [{ message: { content } }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     return original(input, init);
   };
 
   try {
+    const empty = await json('/api/agent/arrange', { method: 'POST', body: JSON.stringify({ text: '今天上海降温下雨，我要去参加一个技术交流会' }) });
+    assert.equal(empty.status, 200);
+    assert.equal(empty.body.actions.length, 0);
     const arranged = await json('/api/agent/arrange', { method: 'POST', body: JSON.stringify({ text: '今天上海降温下雨，我要去参加一个技术交流会' }) });
     assert.equal(arranged.status, 200);
     assert.equal(arranged.body.title, '模型方案');

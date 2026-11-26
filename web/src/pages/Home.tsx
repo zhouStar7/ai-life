@@ -78,7 +78,7 @@ export function HomePage() {
                     </button>
                   </header>
                   <p className={device.offline ? 'status bad' : 'status'}>{device.offline ? '离线 · 保留最后状态' : device.on ? '开启' : '关闭'}</p>
-                  {device.paramLabel ? <p>{device.paramLabel} {device.paramValue}</p> : <p className="muted">没有额外参数</p>}
+                  {device.paramLabel ? <p>{device.paramLabel} {device.paramValue}</p> : null}
                 </article>
               ))}
             </div>

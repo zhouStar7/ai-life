@@ -1,37 +1,44 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { DIET_TODAY, pickRecipe } from '../dietPlan';
 import { useStore } from '../store';
-import { DietPage } from '../pages/Diet';
-import { HomePage } from '../pages/Home';
-import { OverviewPage } from '../pages/Overview';
-import { SettingsPage } from '../pages/Settings';
-import { SpendingPage } from '../pages/Spending';
-import { TravelPage } from '../pages/Travel';
-import { WardrobePage } from '../pages/Wardrobe';
+const DietPage = lazy(() => import('../pages/Diet').then(module => ({ default: module.DietPage })));
+const HomePage = lazy(() => import('../pages/Home').then(module => ({ default: module.HomePage })));
+const OverviewPage = lazy(() => import('../pages/Overview').then(module => ({ default: module.OverviewPage })));
+const SettingsPage = lazy(() => import('../pages/Settings').then(module => ({ default: module.SettingsPage })));
+const SpendingPage = lazy(() => import('../pages/Spending').then(module => ({ default: module.SpendingPage })));
+const TravelPage = lazy(() => import('../pages/Travel').then(module => ({ default: module.TravelPage })));
+const WardrobePage = lazy(() => import('../pages/Wardrobe').then(module => ({ default: module.WardrobePage })));
 import { Icon } from './Icon';
-import { arrange } from '../api/client';
+import { ApiError, arrange } from '../api/client';
 import { Modal } from './ui';
 
 const NAV = [
-  { to: '/', label: '今日概览', icon: 'overview' as const, page: 'overview' },
-  { to: '/wardrobe', label: '衣橱', icon: 'wardrobe' as const, page: 'wardrobe' },
-  { to: '/diet', label: '饮食', icon: 'diet' as const, page: 'diet' },
-  { to: '/home', label: '家居', icon: 'home' as const, page: 'home' },
-  { to: '/travel', label: '出行', icon: 'travel' as const, page: 'travel' },
-  { to: '/spending', label: '支出统计', icon: 'spending' as const, page: 'spending' },
-  { to: '/settings', label: '设置', icon: 'settings' as const, page: 'settings' },
+  { to: '/', label: '今日概览', short: '概览', icon: 'overview' as const, page: 'overview' },
+  { to: '/wardrobe', label: '衣橱', short: '衣橱', icon: 'wardrobe' as const, page: 'wardrobe' },
+  { to: '/diet', label: '饮食', short: '饮食', icon: 'diet' as const, page: 'diet' },
+  { to: '/home', label: '家居', short: '家居', icon: 'home' as const, page: 'home' },
+  { to: '/travel', label: '出行', short: '出行', icon: 'travel' as const, page: 'travel' },
+  { to: '/spending', label: '支出统计', short: '支出', icon: 'spending' as const, page: 'spending' },
+  { to: '/settings', label: '设置', short: '设置', icon: 'settings' as const, page: 'settings' },
 ];
 
 export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const store = useStore();
-  const [navOpen, setNavOpen] = useState(false);
+  const [navAt, setNavAt] = useState<string | null>(null);
+  const navOpen = navAt === location.key;
+  const setNavOpen = (open: boolean) => setNavAt(open ? location.key : null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiSeed, setAiSeed] = useState('');
   const [omni, setOmni] = useState('');
-  const [omniOpen, setOmniOpen] = useState(false);
+  const [omniAt, setOmniAt] = useState<string | null>(null);
+  const omniOpen = omniAt === location.key;
+  const setOmniOpen = (open: boolean) => setOmniAt(open ? location.key : null);
+  const [narrow, setNarrow] = useState(false);
+  const viewportRef = useRef<HTMLElement>(null);
+  const lifeActive = ['/wardrobe', '/diet', '/home', '/travel'].includes(location.pathname);
   const title = NAV.find((item) => item.to === location.pathname)?.label ?? '今日概览';
   const page = location.pathname === '/' ? 'overview' : location.pathname.slice(1);
 
@@ -39,7 +46,16 @@ export function Shell() {
     document.title = `${title} · AI Life`;
     document.documentElement.dataset.theme = 'chinese-ink';
     document.documentElement.dataset.page = page === 'settings' ? 'overview' : page;
+    viewportRef.current?.scrollTo({ top: 0 });
   }, [page, title]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 860px)');
+    const apply = () => setNarrow(media.matches);
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -79,37 +95,42 @@ export function Shell() {
   }
 
   return (
-    <div className="app">
-      {navOpen ? <button type="button" className="scrim" aria-label="关闭菜单" onClick={() => setNavOpen(false)} /> : null}
-      <aside className={navOpen ? 'side open' : 'side'}>
+    <div className={navOpen ? 'app nav-open' : 'app'}>
+      <aside className="side">
         <div>
           <div className="brand">
             <span className="seal-mark">生</span>
-            <div className="brand-name">AI 生活管家</div>
+            <div><div className="brand-name">AI 生活管家</div><p className="brand-caption">每天，从容一点</p></div>
           </div>
-          <nav className="nav-block">
+          <nav className="nav-block" aria-label="主导航">
             {NAV.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')} onClick={() => setNavOpen(false)}>
-                <span className="left"><Icon name={item.icon} />{item.label}</span>
+                <span className="left"><Icon name={item.icon} />{item.label}</span><span className="nav-indicator" aria-hidden="true" />
               </NavLink>
             ))}
           </nav>
         </div>
         <div className="user">
           <div className="user-id">
-            <span className="avatar">星</span>
-            <strong>星宇</strong>
+            <span className="avatar">{store.member?.name.slice(0, 1) || '家'}</span>
+            <strong>{store.member?.name}</strong>
           </div>
+          <button type="button" className="btn-text" onClick={() => { void store.logout(); }}>登出</button>
         </div>
       </aside>
       <div className="workspace">
         <header className="top">
-          <button type="button" className="nav-toggle" aria-label="打开菜单" onClick={() => setNavOpen(true)}><Icon name="menu" /></button>
+          <div className="mobile-brand">
+            <span className="mobile-wordmark"><span className="seal-mark">生</span><strong>AI 生活管家</strong></span>
+            <NavLink to="/settings" className="mobile-profile" aria-label="我的设置">{store.member?.name.slice(0, 1) || '家'}</NavLink>
+          </div>
           <form className="omni" onSubmit={(event) => { event.preventDefault(); goFirstHit(); }}>
             <span className="spark"><Icon name="search" /></span>
             <input
               id="omniInput"
-              placeholder="搜索衣橱、食谱、设备或行程…"
+              aria-label="搜索衣橱、食谱、设备或行程"
+              enterKeyHint="search"
+              placeholder={narrow ? '搜索衣橱、食谱、行程…' : '搜索衣橱、食谱、设备或行程…'}
               value={omni}
               onChange={(event) => { setOmni(event.target.value); setOmniOpen(true); }}
               onFocus={() => setOmniOpen(true)}
@@ -126,26 +147,47 @@ export function Shell() {
               </div>
             ) : null}
           </form>
+          {store.saveState === 'unsaved' ? <span className="save-state unsaved" data-testid="save-state">有修改尚未保存</span> : null}
+          {store.saveState === 'offline' ? <span className="save-state" data-testid="save-state">未连接，显示上次保存的数据</span> : null}
           <div className="top-tools">
-            <button type="button" className="quick" data-testid="open-ai" onClick={openArrange}><Icon name="spark" /><span>今天想安排什么？</span></button>
+            <button type="button" className="quick" data-testid="open-ai" aria-label="今天想安排什么？" onClick={openArrange}><Icon name="spark" /><span>今天想安排什么？</span></button>
           </div>
         </header>
-        <div className="viewport">
-          <Routes>
-            <Route path="/" element={<OverviewPage />} />
+        <main className="viewport" ref={viewportRef}>
+          <Suspense fallback={<p role="status" className="page-loading">正在打开页面…</p>}><Routes>
+            <Route path="/" element={<OverviewPage onArrange={openArrange} />} />
             <Route path="/wardrobe" element={<WardrobePage />} />
             <Route path="/diet" element={<DietPage />} />
             <Route path="/home" element={<HomePage />} />
             <Route path="/travel" element={<TravelPage />} />
             <Route path="/spending" element={<SpendingPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<OverviewPage />} />
-          </Routes>
-        </div>
+            <Route path="*" element={<OverviewPage onArrange={openArrange} />} />
+          </Routes></Suspense>
+        </main>
       </div>
       <div className="toasts" aria-live="polite">
         {store.toasts.map((item) => <div className="toast" key={item.id}>{item.message}</div>)}
       </div>
+      <nav className="tabbar" aria-label="主导航">
+        <NavLink to="/" end className={({ isActive }) => isActive ? 'tab active' : 'tab'}><Icon name="overview" /><span>今日</span></NavLink>
+        <button type="button" className={lifeActive || navOpen ? 'tab active' : 'tab'} aria-haspopup="dialog" aria-expanded={navOpen} onClick={() => setNavOpen(true)}><Icon name="menu" /><span>生活</span></button>
+        <button type="button" className="tab tab-ai" aria-label="AI 安排" aria-haspopup="dialog" onClick={openArrange}><span className="ai-orb"><Icon name="spark" /></span><span>AI 安排</span></button>
+        <NavLink to="/spending" className={({ isActive }) => isActive ? 'tab active' : 'tab'}><Icon name="spending" /><span>账本</span></NavLink>
+        <NavLink to="/settings" className={({ isActive }) => isActive ? 'tab active' : 'tab'}><Icon name="settings" /><span>我的</span></NavLink>
+      </nav>
+      {navOpen ? <Modal title="我的生活" onClose={() => setNavOpen(false)}>
+        <p className="muted">衣食住行，随手打理。</p>
+        <nav className="life-grid" aria-label="生活模块">
+        {NAV.filter((item) => ['wardrobe', 'diet', 'home', 'travel'].includes(item.page)).map((item) => (
+          <NavLink key={item.to} to={item.to} className={`life-entry life-${item.page}`} onClick={() => setNavOpen(false)}>
+            <span className="module-icon"><Icon name={item.icon} /></span>
+            <strong>{item.label}</strong>
+            <small>{{ wardrobe: '穿搭与衣物', diet: '三餐与营养', home: '设备与场景', travel: '行程与行李' }[item.page]}</small>
+          </NavLink>
+        ))}
+        </nav>
+      </Modal> : null}
       {aiOpen ? <AiModal seed={aiSeed} onClose={() => setAiOpen(false)} onOpen={(href) => { setAiOpen(false); setNavOpen(false); navigate(href); }} /> : null}
     </div>
   );
@@ -154,6 +196,10 @@ export function Shell() {
 function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void; onOpen: (href: string) => void }) {
   const store = useStore();
   const [text, setText] = useState(seed);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
   const [plan, setPlan] = useState<{ title: string; lines: string[]; href: string; label: string; actions?: unknown[]; key?: string } | null>(null);
   const todayMeals = store.meals.filter((meal) => (meal.date || DIET_TODAY) === DIET_TODAY);
   const proteinGap = Math.max(0, store.targets.protein - todayMeals.reduce((sum, meal) => sum + meal.protein, 0));
@@ -162,10 +208,13 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
 
   async function submit(raw: string) {
     const value = raw.trim();
-    if (!value) return;
+    if (!value || request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
+    setBusy(true); setNotice(''); setPlan(null);
     setText(value);
     try {
-      const result = await arrange(value);
+      const result = await arrange(value, controller.signal);
       setPlan({
         title: result.title,
         lines: result.lines,
@@ -175,9 +224,11 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
         label: result.adopted ? '已采纳' : result.actions.length > 0 ? '采纳' : '打开',
       });
       return;
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof ApiError && error.status === -1)) return;
+      setNotice('AI 暂时不可用，先按当前记录给你一些建议。');
       localPlan(value);
-    }
+    } finally { request.current = null; setBusy(false); }
   }
 
   function localPlan(value: string) {
@@ -240,13 +291,15 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
         <textarea rows={3} autoFocus placeholder="比如：出差前帮我准备一下" value={text} onChange={(event) => setText(event.target.value)} />
         <div className="pills" style={{ marginTop: 10 }}>
           {['今天上海降温下雨，我要去参加一个技术交流会', '今天穿什么', '补一餐蛋白质', '看看这个月花了多少'].map((item) => (
-            <button type="button" className="pill" key={item} onClick={() => submit(item)}>{item}</button>
+            <button type="button" className="pill" key={item} disabled={busy} onClick={() => submit(item)}>{item}</button>
           ))}
         </div>
         <div className="modal-actions">
-          <button type="submit" className="btn">生成安排</button>
+          <button type="submit" className="btn" disabled={busy || !text.trim()}>{busy ? '正在安排…' : '生成安排'}</button>
+          {busy ? <button type="button" className="btn-ghost" onClick={() => request.current?.abort()}>取消</button> : null}
         </div>
       </form>
+      {notice ? <p className="note" role="status">{notice}</p> : null}
       {plan ? (
         <div className="plan">
           <strong>{plan.title}</strong>

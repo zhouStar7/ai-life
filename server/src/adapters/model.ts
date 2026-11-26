@@ -9,6 +9,7 @@ export async function complete(config: ModelConfig, messages: { role: string; co
   const url = root.endsWith('/chat/completions') ? root : `${root}/chat/completions`;
   const response = await fetch(url, {
     method: 'POST',
+    signal: AbortSignal.timeout(25_000),
     headers: {
       'content-type': 'application/json',
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),

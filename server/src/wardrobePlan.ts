@@ -9,6 +9,7 @@ export type ClosetItem = {
 };
 
 export type ClothingDraft = {
+  price?: number | null;
   name: string;
   category: '上衣' | '裤装' | '裙装' | '外套' | '鞋包';
   season: string;
@@ -85,6 +86,8 @@ export function draftsFromOrder(text: string): ClothingDraft[] {
 }
 
 function draftFromLine(line: string): ClothingDraft | null {
+  const priceMatch = line.match(/[¥￥]\s*(\d+(?:\.\d{1,2})?)(?![\d.])/);
+  const price = priceMatch ? Number(priceMatch[1]) : null;
   const cleaned = line
     .replace(/^(商品名称|商品|名称)\s*[:：]\s*/, '')
     .replace(/[¥￥]\s*\d+(?:\.\d+)?/g, '')
@@ -95,6 +98,7 @@ function draftFromLine(line: string): ClothingDraft | null {
   if (!category) return null;
   return {
     name: cleaned.slice(0, 40),
+    price: price !== null && price <= 21_474_836.47 ? price : null,
     category,
     color: COLORS.find((color) => cleaned.includes(color)) ?? '',
     occasion: STYLES.find((style) => cleaned.includes(style)) ?? '通勤',

@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useExpensePage } from '../api/expenses';
 import { yuan } from '../format';
 import { useStore } from '../store';
-import type { ItineraryDraft, Trip, TripChain, TripStatus } from '../types';
+import type { ItineraryDraft, Trip, TripChain } from '../types';
 import { Empty, Field, Modal, Progress, SpendCard } from '../components/ui';
 
 export function TravelPage() {
@@ -40,7 +41,7 @@ export function TravelPage() {
                 </button>
               ))}
             </div>
-            <article className="card">
+            <article className="card travel-detail">
               <div className="page-head">
                 <div>
                   <h2>{trip.title}</h2>
@@ -48,28 +49,34 @@ export function TravelPage() {
                 </div>
                 <button type="button" className="btn-text" onClick={() => store.removeTrip(trip.id)}>删除行程</button>
               </div>
-              <h3 className="section-title">时间线</h3>
-              <ul className="timeline">
-                {trip.timeline.map((node) => (
-                  <li key={`${node.time}-${node.title}`}>
-                    <strong>{node.title}</strong>
-                    <p className="muted">{node.time} · {node.detail}</p>
-                  </li>
-                ))}
-              </ul>
-              <h3 className="section-title" style={{ marginTop: 8 }}>票务与酒店</h3>
-              {trip.tickets.length === 0 ? (
-                <p className="callout">还没有票务或酒店订单。行李清单和准备建议仍然可以用。</p>
-              ) : (
-                <div className="tickets">
-                  {trip.tickets.map((ticket) => (
-                    <div className="ticket" key={ticket.label}>
-                      <strong>{ticket.label}</strong>
-                      <p><small>{ticket.status}</small></p>
+              <div className="travel-columns">
+                <section>
+                  <h3 className="section-title">时间线</h3>
+                  <ul className="timeline">
+                    {trip.timeline.map((node) => (
+                      <li key={`${node.time}-${node.title}`}>
+                        <strong>{node.title}</strong>
+                        <p className="muted">{node.time} · {node.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                <section>
+                  <h3 className="section-title">票务与酒店</h3>
+                  {trip.tickets.length === 0 ? (
+                    <p className="callout">还没有票务或酒店订单。行李清单和准备建议仍然可以用。</p>
+                  ) : (
+                    <div className="tickets">
+                      {trip.tickets.map((ticket) => (
+                        <div className="ticket" key={ticket.label}>
+                          <strong>{ticket.label}</strong>
+                          <p><small>{ticket.status}</small></p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
+                </section>
+              </div>
             </article>
           </section>
           <aside className="stack">
@@ -77,7 +84,7 @@ export function TravelPage() {
               <h2>出行准备包</h2>
               <p className="reason">按目的地和天气从衣橱选单品，出发前切到离家，并给出一顿可以采纳的餐。</p>
               <div className="row-actions">
-                <button type="button" className="btn" disabled={trip.prepAdopted} onClick={() => store.adoptPrep(trip.id)}>{trip.prepAdopted ? '已采纳' : '采纳准备包'}</button>
+                <button type="button" className="btn" disabled={trip.prepAdopted || trip.status === '已结束'} onClick={() => store.adoptPrep(trip.id)}>{trip.prepAdopted ? '已采纳' : '采纳准备包'}</button>
                 <button type="button" className="btn-ghost" onClick={() => { void store.runChain(trip.id).then((result) => { if (result) setChain(result); }); }}>按行程串起来</button>
               </div>
               {chain && chain.trip.id === trip.id ? (
@@ -176,11 +183,12 @@ function PackingTools({ trip }: { trip: Trip }) {
 
 function TripSpend({ trip }: { trip: Trip }) {
   const store = useStore();
-  const rows = store.expenses.filter((item) => item.tripId === trip.id && item.tag === '行');
+  const ledger = useExpensePage({ tripId: trip.id, tag: '行' });
+  const rows = ledger.rows;
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
   const [kind, setKind] = useState<'票务' | '食宿'>('票务');
-  const total = rows.reduce((sum, item) => sum + item.amount, 0);
+  const total = ledger.page?.amount ?? 0;
 
   return (
     <article className="card">
@@ -189,9 +197,11 @@ function TripSpend({ trip }: { trip: Trip }) {
       {rows.map((item) => (
         <p key={item.id}>{item.note} · {item.merchant} · {yuan(item.amount)}</p>
       ))}
+      {ledger.error ? <p role="alert">{ledger.error} <button className="btn-text" onClick={ledger.retry}>重试</button></p> : null}
+      {ledger.page?.nextCursor ? <button className="btn-ghost" disabled={ledger.loading} onClick={() => void ledger.loadMore()}>加载更多</button> : null}
       <form className="stack" style={{ marginTop: 8 }} onSubmit={(event) => {
         event.preventDefault();
-        const value = Math.round(Number(amount));
+        const value = Math.round(Number(amount) * 100) / 100;
         if (!merchant.trim() || !Number.isFinite(value) || value <= 0) return;
         store.addTripExpense(trip.id, { amount: value, merchant: merchant.trim(), kind });
         setAmount('');
@@ -213,7 +223,7 @@ function TripSpend({ trip }: { trip: Trip }) {
 
 function TripModal({ onClose }: { onClose: () => void }) {
   const store = useStore();
-  const [draft, setDraft] = useState<Pick<Trip, 'title' | 'status' | 'transport' | 'dateLabel'>>({
+  const [draft, setDraft] = useState<Pick<Trip, 'title' | 'status' | 'transport' | 'dateLabel' | 'startDate' | 'endDate'>>({
     title: '',
     status: '即将开始',
     transport: '高铁',
@@ -232,17 +242,12 @@ function TripModal({ onClose }: { onClose: () => void }) {
         <button type="button" className="pill" onClick={() => applyTemplate('weekend')}>周末模板</button>
         <button type="button" className="pill" onClick={() => applyTemplate('work')}>出差模板</button>
       </div>
-      <form onSubmit={(event) => { event.preventDefault(); if (!draft.title.trim()) return; store.addTrip({ ...draft, title: draft.title.trim(), dateLabel: draft.dateLabel.trim() || '日期待定' }); onClose(); }}>
+      <form onSubmit={(event) => { event.preventDefault(); if (!draft.title.trim()) return; if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) return; store.addTrip({ ...draft, title: draft.title.trim(), dateLabel: draft.startDate ? `${draft.startDate} – ${draft.endDate || draft.startDate}` : '日期待定' }); onClose(); }}>
         <div className="form-grid" style={{ marginTop: 12 }}>
           <Field label="名称" wide><input autoFocus required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></Field>
-          <Field label="状态">
-            <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TripStatus })}>
-              <option>即将开始</option>
-              <option>进行中</option>
-            </select>
-          </Field>
           <Field label="交通"><input value={draft.transport} onChange={(event) => setDraft({ ...draft, transport: event.target.value })} /></Field>
-          <Field label="日期" wide><input placeholder="例如 10月2日 – 10月4日" value={draft.dateLabel} onChange={(event) => setDraft({ ...draft, dateLabel: event.target.value })} /></Field>
+          <Field label="出发日期"><input type="date" value={draft.startDate || ''} onChange={event => setDraft({ ...draft, startDate: event.target.value })} /></Field>
+          <Field label="结束日期"><input type="date" min={draft.startDate || undefined} value={draft.endDate || ''} onChange={event => setDraft({ ...draft, endDate: event.target.value })} /></Field>
         </div>
         <div className="modal-actions">
           <button type="button" className="btn-ghost" onClick={onClose}>取消</button>

@@ -42,10 +42,7 @@ export function fallbackPlan(text: string, adoptedTips: string[]): ArrangeResult
 export function planFromModel(text: string, content: string, adoptedTips: string[]): ArrangeResult {
   const intent = routeIntent(text);
   const parsed = extract(content);
-  const modelActions = parseActions(parsed?.actions);
-  const actions = intent === 'cross'
-    ? (coversCross(modelActions) ? modelActions : CROSS_ACTIONS)
-    : modelActions;
+  const actions = parseActions(parsed?.actions);
   const href = typeof parsed?.href === 'string' && ROUTES.includes(parsed.href) ? parsed.href : intentHref(intent);
   const lines = Array.isArray(parsed?.lines) ? parsed.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0) : [];
   const key = intentKey(intent);
@@ -57,11 +54,6 @@ export function planFromModel(text: string, content: string, adoptedTips: string
     actions,
     adopted: adoptedTips.includes(key),
   };
-}
-
-function coversCross(actions: Action[]) {
-  const types = new Set(actions.map((action) => action.type));
-  return types.has('adopt_outfit') && types.has('add_meal') && types.has('apply_scene') && types.has('append_packing') && types.has('add_expense');
 }
 
 function extract(content: string): { title?: string; lines?: unknown; href?: string; actions?: unknown } | null {

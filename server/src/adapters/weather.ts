@@ -1,7 +1,7 @@
 export async function readWeather(url?: string) {
   if (!url) return { weatherOn: true, weatherLabel: '22°C 多云' };
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error('weather');
     const body = await response.json() as { label?: string };
     if (!body.label) throw new Error('weather');

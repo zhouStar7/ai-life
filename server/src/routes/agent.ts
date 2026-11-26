@@ -1,5 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
+import { readClientSnapshot } from '../snapshot.js';
+import { memberOf } from '../auth.js';
 import { complete } from '../adapters/model.js';
 import { readJson } from '../ids.js';
 import { adopt } from '../agent/adopt.js';
@@ -14,10 +16,11 @@ export function registerAgent(app: Hono, db: PrismaClient) {
     if (!text) return c.json({ error: 'empty' }, 400);
     const profile = await db.profile.findUniqueOrThrow({ where: { id: 'local' } });
     if (!profile.modelBase) return c.json({ error: 'model_unavailable' }, 503);
-    const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    const tips = readJson<string[]>(session.adoptedTips, []);
+    const memberId = memberOf(c);
+    const state = await db.memberState.findUniqueOrThrow({ where: { memberId } });
+    const tips = readJson<string[]>(state.adoptedTips, []);
     try {
-      const summary = contextText(await buildContext(db));
+      const summary = contextText(await buildContext(db, memberId));
       const content = await complete(
         { baseUrl: profile.modelBase, apiKey: profile.modelKey, model: profile.modelName },
         [
@@ -36,8 +39,9 @@ export function registerAgent(app: Hono, db: PrismaClient) {
 
   app.post('/api/agent/adopt', async (c) => {
     const body = await c.req.json();
-    const actions = parseActions(body.actions);
-    const snapshot = await adopt(db, typeof body.key === 'string' ? body.key : undefined, actions);
-    return c.json({ snapshot });
+    const provided = Array.isArray(body.actions);
+    const actions = provided ? parseActions(body.actions) : [];
+    const outcome = await adopt(db, memberOf(c), typeof body.key === 'string' ? body.key : undefined, actions, provided);
+    return c.json({ ...outcome, snapshot: await readClientSnapshot(db, memberOf(c)) });
   });
 }

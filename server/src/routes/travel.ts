@@ -3,8 +3,12 @@ import type { Hono } from 'hono';
 import { complete } from '../adapters/model.js';
 import { draftFromModel, ITINERARY_MODEL_PROMPT, parseItinerary, type ItineraryDraft } from '../adapters/itinerary.js';
 import { applyNamedScene } from '../homeLink.js';
+import { inferTripDates, validDate } from '../../../shared/trips.js';
+import { todayIso } from '../calendar.js';
 import { readJson, uid } from '../ids.js';
-import { readSnapshot } from '../snapshot.js';
+import { toCents } from '../money.js';
+import { memberOf } from '../auth.js';
+import { readMutationSnapshot, readSnapshot } from '../snapshot.js';
 import { applyTripAway } from '../tripAway.js';
 import { destinationOf, mealReason, pickTravelOutfit, suggestTripMeal } from '../tripPlan.js';
 
@@ -12,22 +16,24 @@ function packingItems(lines: string[]) {
   return lines.map((text) => ({ id: uid('p'), text, done: false }));
 }
 
-async function saveTrip(db: PrismaClient, draft: ItineraryDraft) {
+async function saveTrip(db: PrismaClient, memberId: string, draft: ItineraryDraft) {
   const id = uid('trip');
   await db.trip.create({
     data: {
       id,
+      memberId,
       title: draft.title,
       status: draft.status,
       transport: draft.transport,
       dateLabel: draft.dateLabel,
+      ...(draft.startDate && draft.endDate ? { startDate: draft.startDate, endDate: draft.endDate } : inferTripDates(draft.dateLabel, draft.timeline.map(n => n.time), todayIso())),
       tickets: JSON.stringify(draft.tickets),
       timeline: JSON.stringify(draft.timeline),
       packing: JSON.stringify(packingItems(draft.packing)),
       prepAdopted: false,
     },
   });
-  await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: id } });
+  await db.memberState.update({ where: { memberId }, data: { activeTripId: id } });
   return id;
 }
 
@@ -59,33 +65,36 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const body = await c.req.json();
     const draft = body.draft as ItineraryDraft | undefined;
     if (!draft?.title || !Array.isArray(draft.timeline) || draft.timeline.length === 0) return c.json({ error: 'invalid' }, 400);
-    await saveTrip(db, {
+    if ((draft.startDate && !validDate(draft.startDate)) || (draft.endDate && !validDate(draft.endDate)) || (draft.startDate && draft.endDate && draft.endDate < draft.startDate)) return c.json({ error: 'invalid_date' }, 400);
+    await saveTrip(db, memberOf(c), {
       title: String(draft.title).trim(),
       status: '即将开始',
       transport: draft.transport || '其他',
       dateLabel: draft.dateLabel || '日期待定',
+      startDate: draft.startDate, endDate: draft.endDate,
       tickets: Array.isArray(draft.tickets) ? draft.tickets : [],
       timeline: draft.timeline,
       packing: Array.isArray(draft.packing) && draft.packing.length > 0 ? draft.packing : ['身份证', '充电器', '换洗衣物'],
     });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/chain', async (c) => {
-    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
+    const memberId = memberOf(c);
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId } });
     if (!trip) return c.json({ error: 'missing' }, 404);
     const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    const items = await db.wardrobeItem.findMany();
+    const items = await db.wardrobeItem.findMany({ where: { memberId } });
     const timeline = readJson<{ detail: string }[]>(trip.timeline, []);
     const destination = destinationOf(trip.title, timeline.map((node) => node.detail));
     const outfit = pickTravelOutfit(items, destination, session.weatherLabel, session.weatherOn);
     if (outfit.itemIds.length > 0) {
-      await db.wardrobeItem.updateMany({ where: { id: { in: outfit.itemIds } }, data: { wears: { increment: 1 } } });
+      await db.wardrobeItem.updateMany({ where: { id: { in: outfit.itemIds }, memberId }, data: { wears: { increment: 1 } } });
     }
-    await db.sessionState.update({ where: { id: 'local' }, data: { outfitAdopted: true } });
+    await db.memberState.update({ where: { memberId }, data: { outfitAdopted: true } });
     const scene = await applyTripAway(db);
-    const meals = await db.meal.findMany();
-    const recipes = await db.recipe.findMany();
+    const meals = await db.meal.findMany({ where: { memberId } });
+    const recipes = await db.recipe.findMany({ where: { memberId } });
     const meal = suggestTripMeal(recipes.map((recipe) => ({
       slot: recipe.slot,
       name: recipe.name,
@@ -94,7 +103,7 @@ export function registerTravel(app: Hono, db: PrismaClient) {
       carb: recipe.carb,
       fat: recipe.fat,
     })), meals.map((item) => item.name));
-    const snapshot = await readSnapshot(db);
+    const snapshot = await readSnapshot(db, memberOf(c));
     const tripSpend = snapshot.expenses
       .filter((item) => item.tripId === trip.id && item.tag === '行')
       .reduce((sum, item) => sum + item.amount, 0);
@@ -116,11 +125,12 @@ export function registerTravel(app: Hono, db: PrismaClient) {
   });
 
   app.post('/api/trips/:id/meal', async (c) => {
-    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
+    const memberId = memberOf(c);
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId } });
     if (!trip) return c.json({ error: 'missing' }, 404);
     const body = await c.req.json().catch(() => ({} as { name?: unknown }));
-    const recipes = await db.recipe.findMany();
-    const meals = await db.meal.findMany();
+    const recipes = await db.recipe.findMany({ where: { memberId } });
+    const meals = await db.meal.findMany({ where: { memberId } });
     const suggested = suggestTripMeal(recipes.map((recipe) => ({
       slot: recipe.slot,
       name: recipe.name,
@@ -132,11 +142,13 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const recipe = recipes.find((item) => item.name === (typeof body.name === 'string' ? body.name.trim() : ''))
       ?? recipes.find((item) => item.name === suggested.name);
     if (!recipe) return c.json({ error: 'missing' }, 404);
-    const exists = await db.meal.findFirst({ where: { name: recipe.name } });
+    const exists = await db.meal.findFirst({ where: { memberId, name: recipe.name } });
     if (!exists) {
       await db.meal.create({
         data: {
           id: uid('m'),
+          memberId,
+          date: todayIso(),
           slot: recipe.slot,
           name: recipe.name,
           time: '12:30',
@@ -147,48 +159,61 @@ export function registerTravel(app: Hono, db: PrismaClient) {
         },
       });
     }
-    return c.json({ snapshot: await readSnapshot(db), meal: { name: recipe.name, slot: recipe.slot } });
+    return c.json({ snapshot: await readMutationSnapshot(db, c), meal: { name: recipe.name, slot: recipe.slot } });
   });
 
   app.post('/api/trips', async (c) => {
     const body = await c.req.json();
     if (!body.title) return c.json({ error: 'invalid' }, 400);
+    const dates = body.startDate || body.endDate
+      ? { startDate: String(body.startDate ?? ''), endDate: String(body.endDate ?? body.startDate ?? '') }
+      : inferTripDates(body.dateLabel || '', [], todayIso());
+    if (dates.startDate && (!validDate(dates.startDate) || !dates.endDate || !validDate(dates.endDate) || dates.endDate < dates.startDate)) return c.json({ error: 'invalid_date' }, 400);
     const id = uid('trip');
+    const memberId = memberOf(c);
     await db.trip.create({
       data: {
         id,
+        memberId,
         title: String(body.title).trim(),
         status: body.status === '进行中' ? '进行中' : '即将开始',
         transport: body.transport || '高铁',
         dateLabel: body.dateLabel || '日期待定',
+        ...dates,
         tickets: '[]',
         timeline: JSON.stringify([{ time: '待定', title: '出发', detail: '时间补上之后会出现在这里' }]),
         packing: JSON.stringify(['身份证', '充电器', '换洗衣物'].map((text) => ({ id: uid('p'), text, done: false }))),
         prepAdopted: false,
       },
     });
-    await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: id } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    await db.memberState.update({ where: { memberId }, data: { activeTripId: id } });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.delete('/api/trips/:id', async (c) => {
+    const memberId = memberOf(c);
     const id = c.req.param('id');
+    const owned = await db.trip.findFirst({ where: { id, memberId } });
+    if (!owned) return c.json({ error: 'missing' }, 404);
     await db.trip.delete({ where: { id } });
-    const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    if (session.activeTripId === id) {
-      const remaining = await db.trip.findFirst();
-      await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: remaining?.id ?? '' } });
+    const state = await db.memberState.findUniqueOrThrow({ where: { memberId } });
+    if (state.activeTripId === id) {
+      const remaining = await db.trip.findFirst({ where: { memberId } });
+      await db.memberState.update({ where: { memberId }, data: { activeTripId: remaining?.id ?? '' } });
     }
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/select', async (c) => {
-    await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: c.req.param('id') } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    const memberId = memberOf(c);
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId } });
+    if (!trip) return c.json({ error: 'missing' }, 404);
+    await db.memberState.update({ where: { memberId }, data: { activeTripId: trip.id } });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/packing', async (c) => {
-    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId: memberOf(c) } });
     if (!trip) return c.json({ error: 'missing' }, 404);
     const body = await c.req.json().catch(() => ({} as { text?: unknown }));
     const text = typeof body.text === 'string' ? body.text.trim() : '';
@@ -196,26 +221,28 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const packing = readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []);
     if (!packing.some((item) => item.text === text)) packing.push({ id: uid('p'), text, done: false });
     await db.trip.update({ where: { id: trip.id }, data: { packing: JSON.stringify(packing) } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/packing-templates', async (c) => {
     const body = await c.req.json().catch(() => ({} as { name?: unknown; tripId?: unknown }));
     const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const trip = typeof body.tripId === 'string' ? await db.trip.findUnique({ where: { id: body.tripId } }) : null;
+    const memberId = memberOf(c);
+    const trip = typeof body.tripId === 'string' ? await db.trip.findFirst({ where: { id: body.tripId, memberId } }) : null;
     if (!name || !trip) return c.json({ error: 'invalid' }, 400);
     const packing = readJson<{ text: string }[]>(trip.packing, []);
     const items = [...new Set(packing.map((item) => item.text).filter(Boolean))];
     if (items.length === 0) return c.json({ error: 'invalid' }, 400);
-    await db.packingTemplate.create({ data: { id: uid('pack'), name, items: JSON.stringify(items) } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    await db.packingTemplate.create({ data: { id: uid('pack'), memberId, name, items: JSON.stringify(items) } });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/packing-template', async (c) => {
-    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
+    const memberId = memberOf(c);
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId } });
     const body = await c.req.json().catch(() => ({} as { templateId?: unknown }));
     const template = typeof body.templateId === 'string'
-      ? await db.packingTemplate.findUnique({ where: { id: body.templateId } })
+      ? await db.packingTemplate.findFirst({ where: { id: body.templateId, memberId } })
       : null;
     if (!trip || !template) return c.json({ error: 'missing' }, 404);
     const packing = readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []);
@@ -224,48 +251,53 @@ export function registerTravel(app: Hono, db: PrismaClient) {
       if (!owned.has(text)) packing.push({ id: uid('p'), text, done: false });
     }
     await db.trip.update({ where: { id: trip.id }, data: { packing: JSON.stringify(packing) } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/expenses', async (c) => {
-    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
+    const memberId = memberOf(c);
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId } });
     if (!trip) return c.json({ error: 'missing' }, 404);
     const body = await c.req.json().catch(() => ({} as { amount?: unknown; merchant?: unknown; kind?: unknown }));
-    const amount = Math.round(Number(body.amount));
+    const amount = toCents(Number(body.amount));
     const kind = body.kind === '食宿' ? '食宿' : body.kind === '票务' ? '票务' : '';
     const merchant = typeof body.merchant === 'string' ? body.merchant.trim() : '';
     if (!kind || !merchant || !Number.isFinite(amount) || amount <= 0) return c.json({ error: 'invalid' }, 400);
     await db.expense.create({
       data: {
         id: uid('e'),
+        memberId,
         tag: '行',
         amount,
-        date: '2026-09-22',
+        date: todayIso(),
         merchant,
         note: kind,
         tripId: trip.id,
       },
     });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/packing/:itemId', async (c) => {
-    const trip = await db.trip.findUniqueOrThrow({ where: { id: c.req.param('id') } });
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId: memberOf(c) } });
+    if (!trip) return c.json({ error: 'missing' }, 404);
     const packing = readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []);
-    const next = packing.map((item) => (item.id === c.req.param('itemId') ? { ...item, done: !item.done } : item));
+    const body = await c.req.json().catch(() => ({}));
+    const next = packing.map((item) => (item.id === c.req.param('itemId') ? { ...item, done: typeof body.done === 'boolean' ? body.done : !item.done } : item));
     await db.trip.update({ where: { id: trip.id }, data: { packing: JSON.stringify(next) } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/trips/:id/adopt-prep', async (c) => {
-    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
-    if (!trip || trip.prepAdopted) return c.json({ snapshot: await readSnapshot(db) });
+    const memberId = memberOf(c);
+    const trip = await db.trip.findFirst({ where: { id: c.req.param('id'), memberId } });
+    if (!trip || trip.prepAdopted) return c.json({ snapshot: await readSnapshot(db, memberId) });
     await db.trip.update({ where: { id: trip.id }, data: { prepAdopted: true } });
     await applyNamedScene(db, '离家');
-    const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    const tips = readJson<string[]>(session.adoptedTips, []);
+    const state = await db.memberState.findUniqueOrThrow({ where: { memberId } });
+    const tips = readJson<string[]>(state.adoptedTips, []);
     if (!tips.includes('prep')) tips.push('prep');
-    await db.sessionState.update({ where: { id: 'local' }, data: { adoptedTips: JSON.stringify(tips) } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    await db.memberState.update({ where: { memberId }, data: { adoptedTips: JSON.stringify(tips) } });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 }

@@ -10,11 +10,12 @@ import assert from 'node:assert/strict';
 import { deriveAlerts, mapDevices } from './adapters/home-assistant.js';
 import { createApp } from './app.js';
 import { seedIfEmpty } from './seed.js';
+import { sessionCookie } from './testSession.js';
 import { serviceCalls } from './scenes.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'ai-life-home-'));
 process.env.DATABASE_URL = `file:${path.join(dir, 'test.sqlite')}`;
-execSync('npx prisma db push --skip-generate', {
+execSync('./node_modules/.bin/prisma db push --skip-generate', {
   cwd: path.join(import.meta.dirname, '..'),
   env: process.env,
   stdio: 'pipe',
@@ -80,10 +81,12 @@ after(async () => {
   await db.$disconnect();
 });
 
+let cookie = '';
 async function json(pathname: string, init?: RequestInit) {
+  if (!cookie) cookie = await sessionCookie(base);
   const response = await fetch(`${base}${pathname}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'content-type': 'application/json', cookie, ...(init?.headers ?? {}) },
   });
   const body = await response.json();
   return { status: response.status, body };
@@ -181,6 +184,26 @@ test('handled alerts stay handled and the example filter stays gone', async () =
   const final = await json('/api/snapshot');
   assert.equal(final.body.alerts.some((item: { handled: boolean }) => !item.handled), false);
   assert.equal(JSON.stringify(final.body).includes('mock-token'), false);
+});
+
+test('adopting a scene calls the assistant and can be retried without a second call', async () => {
+  calls.length = 0;
+  const adopted = await json('/api/agent/adopt', {
+    method: 'POST',
+    body: JSON.stringify({ actions: [{ type: 'apply_scene', name: '离家' }] }),
+  });
+  assert.equal(adopted.status, 200);
+  assert.equal(adopted.body.results[0].status, 'done');
+  assert.equal(adopted.body.results[0].via, 'home-assistant');
+  assert.equal(calls.some((call) => call.url.startsWith('/api/services/')), true);
+  assert.equal(adopted.body.snapshot.home.connected, true);
+  calls.length = 0;
+  const again = await json('/api/agent/adopt', {
+    method: 'POST',
+    body: JSON.stringify({ actions: [{ type: 'apply_scene', name: '离家' }] }),
+  });
+  assert.equal(again.body.results[0].status, 'skipped');
+  assert.equal(calls.length, 0);
 });
 
 test('service calls follow the scene diff', () => {

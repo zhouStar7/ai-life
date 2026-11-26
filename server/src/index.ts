@@ -3,8 +3,10 @@ import { PrismaClient } from '@prisma/client';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { migratePhotos } from './photos.js';
+import { migrateTripDates } from './tripDates.js';
 import { createApp } from './app.js';
-import { seedIfEmpty } from './seed.js';
+import { migrateMembers, migrateMoneyToCents, seedIfEmpty } from './seed.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.join(root, 'data');
@@ -15,6 +17,10 @@ if (!process.env.DATABASE_URL) {
 
 const db = new PrismaClient();
 await seedIfEmpty(db);
+await migrateMoneyToCents(db);
+await migrateMembers(db);
+await migratePhotos(db);
+await migrateTripDates(db);
 const port = Number(process.env.PORT || 8787);
 const hostname = process.env.HOST || '127.0.0.1';
 serve({ fetch: createApp(db).fetch, port, hostname }, () => {

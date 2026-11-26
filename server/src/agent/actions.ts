@@ -1,3 +1,6 @@
+import { todayIso } from '../calendar.js';
+import { fromCents, toCents } from '../money.js';
+
 export const TAGS = ['衣', '食', '住', '行'] as const;
 export const SLOTS = ['早餐', '午餐', '晚餐', '加餐'] as const;
 export const SCENES = ['回家', '离家', '睡眠', '影院'] as const;
@@ -53,8 +56,8 @@ export function parseActions(value: unknown): Action[] {
         type: 'add_expense',
         id: typeof row.id === 'string' ? row.id : undefined,
         tag: String(row.tag),
-        amount: Math.round(Number(row.amount)),
-        date: typeof row.date === 'string' ? row.date : '2026-09-22',
+        amount: fromCents(toCents(Number(row.amount))),
+        date: typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : todayIso(),
         merchant: typeof row.merchant === 'string' ? row.merchant : '手动记账',
         note: typeof row.note === 'string' ? row.note : '',
       });

@@ -1,17 +1,22 @@
+import { currentMonth, monthLabel, recentMonths, shiftMonth, todayIso } from './calendar';
 import type { Expense, SpendTag, WardrobeItem } from './types';
 
-export const DEMO_MONTH = '2026-09';
-export const PREV_MONTH_SPEND = 6480;
+export { currentMonth, monthLabel, shiftMonth };
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
-export function todayLabel() {
-  const day = new Date(2026, 8, 22);
-  return `${day.getMonth() + 1}月${day.getDate()}日 周${WEEK[day.getDay()]}`;
+export function todayLabel(now = new Date()) {
+  const [year, month, day] = todayIso(now).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return `${month}月${day}日 周${WEEK[date.getDay()]}`;
 }
 
 export function yuan(amount: number) {
-  return `¥${Math.round(amount).toLocaleString('zh-CN')}`;
+  const cents = Math.round(Math.abs(amount) * 100);
+  const whole = Math.trunc(cents / 100).toLocaleString('zh-CN');
+  const frac = cents % 100;
+  const text = frac === 0 ? whole : `${whole}.${String(frac).padStart(2, '0')}`;
+  return `${amount < 0 ? '-' : ''}¥${text}`;
 }
 
 export function uid(prefix: string) {
@@ -28,12 +33,20 @@ export function share(part: number, total: number) {
   return Math.round((part / total) * 1000) / 10;
 }
 
-export function monthExpenses(expenses: Expense[], tag?: SpendTag) {
-  return expenses.filter((item) => item.date.startsWith(DEMO_MONTH) && (!tag || item.tag === tag));
+export function monthExpenses(expenses: Expense[], tag?: SpendTag, month = currentMonth()) {
+  return expenses.filter((item) => item.date.startsWith(month) && (!tag || item.tag === tag));
 }
 
 export function sumAmount(expenses: Expense[]) {
   return expenses.reduce((sum, item) => sum + item.amount, 0);
+}
+
+export function spendTrend(expenses: Expense[], month = currentMonth()) {
+  return recentMonths(month, 6).map((item) => ({
+    month: item,
+    label: `${Number(item.slice(5))}月`,
+    amount: sumAmount(expenses.filter((row) => row.date.startsWith(item))),
+  }));
 }
 
 export function colorHex(color: string) {

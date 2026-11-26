@@ -1,4 +1,6 @@
-export const DIET_TODAY = '2026-09-22';
+import { todayIso } from './calendar';
+
+export const DIET_TODAY = todayIso();
 
 export type MealSlotName = '早餐' | '午餐' | '晚餐' | '加餐';
 
@@ -199,15 +201,15 @@ export function pickRecipe<T extends RecipeLike>(recipes: T[], meals: MealLike[]
   return best;
 }
 
-export function weekFromMeals(meals: MealLike[]) {
-  const [year, month, day] = DIET_TODAY.split('-').map(Number);
+export function weekFromMeals(meals: MealLike[], today = DIET_TODAY) {
+  const [year, month, day] = today.split('-').map(Number);
   const end = new Date(year, month - 1, day);
   const days: { date: string; label: string; kcal: number }[] = [];
   for (let offset = 6; offset >= 0; offset -= 1) {
     const current = new Date(end);
     current.setDate(end.getDate() - offset);
     const date = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-    const kcal = meals.reduce((sum, meal) => sum + ((meal.date || DIET_TODAY) === date ? meal.kcal : 0), 0);
+    const kcal = meals.reduce((sum, meal) => sum + ((meal.date || today) === date ? meal.kcal : 0), 0);
     days.push({ date, label: String(current.getDate()), kcal });
   }
   return days;

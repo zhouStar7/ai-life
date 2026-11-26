@@ -1,16 +1,18 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
+import { memberOf } from '../auth.js';
 import { readJson } from '../ids.js';
 
 export function registerSearch(app: Hono, db: PrismaClient) {
   app.get('/api/search', async (c) => {
     const q = (c.req.query('q') ?? '').trim().toLowerCase();
     if (!q) return c.json([]);
+    const memberId = memberOf(c);
     const [items, recipes, devices, trips] = await Promise.all([
-      db.wardrobeItem.findMany(),
-      db.recipe.findMany(),
+      db.wardrobeItem.findMany({ where: { memberId } }),
+      db.recipe.findMany({ where: { memberId } }),
       db.device.findMany(),
-      db.trip.findMany(),
+      db.trip.findMany({ where: { memberId } }),
     ]);
     const hits = [
       ...items.map((item) => ({ href: '/wardrobe', kind: '衣橱', title: item.name, meta: `${item.category} · ${item.color}` })),

@@ -1,6 +1,10 @@
+import { inferTripDates } from '../../../shared/trips.js';
+import { todayIso } from '../calendar.js';
 import { extractJson } from '../json.js';
 
 export type ItineraryDraft = {
+  startDate?: string | null;
+  endDate?: string | null;
   title: string;
   status: '即将开始';
   transport: string;
@@ -78,6 +82,7 @@ export function parseItinerary(text: string): ItineraryDraft | null {
   else if (/降温|寒冷|冷/.test(source)) packing.push('保暖内胆');
   const uniqueDays = [...new Set(days)];
   return {
+    ...inferTripDates(source, timeline.map(n => n.time), todayIso()),
     title: `${destination || '出行'}行程`,
     status: '即将开始',
     transport: transport || '其他',

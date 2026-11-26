@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { monthExpenses, percentChange, PREV_MONTH_SPEND, share, sumAmount, yuan } from '../format';
-import { PAST_TREND, TAG_COLOR } from '../seed';
+import { currentMonth, monthLabel, percentChange, shiftMonth, share, yuan } from '../format';
+import { useExpensePage } from '../api/expenses';
+import { todayIso } from '../calendar';
+import { TAG_COLOR } from '../seed';
 import { useStore } from '../store';
 import { SPEND_TAGS, type BillDraft, type SpendTag } from '../types';
 import { Empty, Field, Modal, Progress } from '../components/ui';
@@ -12,20 +14,23 @@ export function SpendingPage() {
   const [params, setParams] = useSearchParams();
   const tagParam = params.get('tag');
   const tag = SPEND_TAGS.includes(tagParam as SpendTag) ? (tagParam as SpendTag) : '全部';
+  const requested = params.get('month');
+  const month = requested && /^\d{4}-\d{2}$/.test(requested) && requested <= currentMonth() ? requested : currentMonth();
   const [adding, setAdding] = useState(false);
   const [billRows, setBillRows] = useState<BillDraft[] | null>(null);
   const [readingBill, setReadingBill] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
   const shotRef = useRef<HTMLInputElement>(null);
-  const month = monthExpenses(store.expenses);
-  const total = sumAmount(month);
-  const filtered = tag === '全部' ? month : monthExpenses(store.expenses, tag);
-  const rows = [...filtered].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
-  const change = percentChange(total, PREV_MONTH_SPEND);
+  const ledger = useExpensePage({ month, ...(tag === '全部' ? {} : { tag }) });
+  const summary = ledger.page?.summary ?? (month === store.spending.month ? store.spending : { monthTotal: 0, byTag: { 衣: 0, 食: 0, 住: 0, 行: 0 }, trend: [] });
+  const total = summary.monthTotal;
+  const rows = ledger.rows;
+  const previous = summary.trend.find(t => t.month === shiftMonth(month, -1))?.amount ?? 0;
+  const change = percentChange(total, previous);
   const remain = store.budgets.total - total;
-  const parts = SPEND_TAGS.map((item) => ({ tag: item, amount: sumAmount(monthExpenses(store.expenses, item)) }));
-  const gradient = donut(parts.map((part) => ({ color: TAG_COLOR[part.tag], value: part.amount })));
-  const trend = [...PAST_TREND, { label: '9月', amount: total }];
+  const parts = SPEND_TAGS.map(item => ({ tag: item, amount: summary.byTag[item] }));
+  const gradient = donut(parts.map(part => ({ color: TAG_COLOR[part.tag], value: part.amount })));
+  const trend = summary.trend;
   const peak = Math.max(...trend.map((item) => item.amount), 1);
 
   async function onBillFile(file: File | undefined, kind: 'csv' | 'image') {
@@ -41,9 +46,15 @@ export function SpendingPage() {
     if (rows) setBillRows(rows);
   }
 
+  function query(nextTag: '全部' | SpendTag, nextMonth: string) {
+    const value: Record<string, string> = {};
+    if (nextTag !== '全部') value.tag = nextTag;
+    if (nextMonth !== currentMonth()) value.month = nextMonth;
+    setParams(value);
+  }
+
   function selectTag(next: '全部' | SpendTag) {
-    if (next === '全部') setParams({});
-    else setParams({ tag: next });
+    query(next, month);
   }
 
   const showFilter = !store.home.connected && store.alerts.some((alert) => alert.id === 'a-filter' && !alert.handled);
@@ -58,9 +69,11 @@ export function SpendingPage() {
       <header className="page-head">
         <div>
           <h1 className="display" style={{ fontSize: 32 }}>支出统计</h1>
-          <p className="muted">2026 年 9 月</p>
+          <p className="muted">{monthLabel(month)}</p>
         </div>
         <div className="row-actions">
+          <button type="button" className="btn-ghost" onClick={() => query(tag, shiftMonth(month, -1))}>上个月</button>
+          <button type="button" className="btn-ghost" disabled={month >= currentMonth()} onClick={() => query(tag, shiftMonth(month, 1))}>下个月</button>
           <button type="button" className="btn-ghost" data-testid="import-bills" disabled={readingBill} onClick={() => { setBillRows([]); }}>
             {readingBill ? '读取中…' : '导入账单'}
           </button>
@@ -68,14 +81,15 @@ export function SpendingPage() {
         </div>
       </header>
       <section className="grid-4">
-        <article className="card kpi"><span>本月总支出</span><strong>{yuan(total)}</strong></article>
+        <article className="card kpi kpi-primary"><span>本月总支出</span><strong>{yuan(total)}</strong></article>
         <article className="card kpi">
           <span>环比上月</span>
           <strong className={change > 0 ? 'up' : 'down'}>{change > 0 ? '↑' : '↓'} {Math.abs(change)}%</strong>
         </article>
-        <article className="card kpi">
+        <article className="card kpi kpi-budget">
           <span>{store.budgets.total > 0 ? '预算剩余 / 总预算' : '月预算'}</span>
-          <strong>{store.budgets.total > 0 ? `${yuan(Math.max(0, remain))} / ${yuan(store.budgets.total)}` : '未设置'}</strong>
+          <strong>{store.budgets.total > 0 ? yuan(Math.max(0, remain)) : '未设置'}</strong>
+          {store.budgets.total > 0 ? <small className="muted">总预算 {yuan(store.budgets.total)}{remain < 0 ? ` · 超出 ${yuan(-remain)}` : ''}</small> : null}
         </article>
         <article className="card kpi">
           <span>整体进度</span>
@@ -113,7 +127,7 @@ export function SpendingPage() {
           <h2>近 6 个月</h2>
           <div className="trend">
             {trend.map((item) => (
-              <div className={item.label === '9月' ? 'trend-col now' : 'trend-col'} key={item.label}>
+              <div className={item.month === month ? 'trend-col now' : 'trend-col'} key={item.month}>
                 <b style={{ height: `${Math.max(8, (item.amount / peak) * 100)}%` }} />
                 <span>{item.label}</span>
               </div>
@@ -124,7 +138,7 @@ export function SpendingPage() {
       <article className="card" style={{ marginBottom: 14 }}>
         <h2>分模块预算</h2>
         {SPEND_TAGS.map((item) => {
-          const spent = sumAmount(monthExpenses(store.expenses, item));
+          const spent = summary.byTag[item];
           const budget = store.budgets[item];
           return (
             <div className="macro" key={item}>
@@ -144,7 +158,8 @@ export function SpendingPage() {
             <button type="button" key={item} data-testid={`filter-${item}`} className={tag === item ? 'pill active' : 'pill'} onClick={() => selectTag(item)}>{item}</button>
           ))}
         </div>
-        {rows.length === 0 ? (
+        {ledger.error ? <p role="alert" className="note">{ledger.error} <button className="btn-text" onClick={ledger.retry}>重试</button></p> : null}
+        {ledger.loading && rows.length === 0 ? <p role="status">正在读取账单…</p> : rows.length === 0 && !ledger.error ? (
           <Empty title={tag === '全部' ? '还没有流水' : `「${tag}」下面还没有流水`} desc="记一笔就能出现在这里。" action={<button type="button" className="btn" onClick={() => setAdding(true)}>记一笔</button>} />
         ) : rows.map((item) => (
           <div className="txn" key={item.id}>
@@ -157,6 +172,7 @@ export function SpendingPage() {
             <button type="button" className="btn-text small" onClick={() => store.removeExpense(item.id)}>删除</button>
           </div>
         ))}
+        {ledger.page?.nextCursor ? <button className="btn-ghost" disabled={ledger.loading} onClick={() => void ledger.loadMore()}>{ledger.loading ? '加载中…' : `加载更多（已显示 ${rows.length} / ${ledger.page.total} 笔）`}</button> : null}
       </article>
       <article className="card">
         <h2>省钱建议</h2>
@@ -218,7 +234,8 @@ function ImportModal({
   onClose: () => void;
 }) {
   const store = useStore();
-  const ready = rows.length > 0 && rows.every((row) => row.tag);
+  const fresh = rows.filter((row) => !row.duplicate);
+  const ready = fresh.length > 0 && fresh.every((row) => row.tag);
 
   function setTag(index: number, tag: string) {
     onChange(rows.map((row, item) => (item === index ? { ...row, tag: tag ? tag as SpendTag : null } : row)));
@@ -226,7 +243,7 @@ function ImportModal({
 
   return (
     <Modal title="导入账单" onClose={onClose}>
-      <p className="muted">CSV 按衣食住行归类。截图交给已连接的模型。确认后计入本月环图和预算进度。</p>
+      <p className="muted">CSV 按衣食住行归类。截图交给已连接的模型。重复账单会标出来，确认时跳过。</p>
       <div className="row-actions" style={{ marginTop: 12 }}>
         <button type="button" className="btn-ghost" disabled={reading} onClick={onCsv}>选择 CSV</button>
         <button type="button" className="btn-ghost" disabled={reading} onClick={onShot}>选择截图</button>
@@ -239,7 +256,7 @@ function ImportModal({
           </select>
           <div>
             <strong>{row.merchant}</strong>
-            <p className="muted">{row.date.slice(5)} · {row.note}</p>
+            <p className="muted">{row.date.slice(5)} · {row.note}{row.duplicate ? ' · 已入账，将跳过' : ''}</p>
           </div>
           <strong>{yuan(row.amount)}</strong>
         </div>
@@ -252,7 +269,7 @@ function ImportModal({
           data-testid="confirm-import"
           disabled={!ready}
           onClick={() => { store.importExpenses(rows); onClose(); }}
-        >确认导入</button>
+        >{ready ? `导入 ${fresh.filter((row) => row.tag).length} 笔` : '确认导入'}</button>
       </div>
     </Modal>
   );
@@ -272,7 +289,7 @@ function donut(parts: { color: string; value: number }[]) {
 
 function ExpenseModal({ onClose }: { onClose: () => void }) {
   const store = useStore();
-  const [draft, setDraft] = useState({ tag: '食' as SpendTag, amount: '', date: '2026-09-22', merchant: '', note: '' });
+  const [draft, setDraft] = useState({ tag: '食' as SpendTag, amount: '', date: todayIso(), merchant: '', note: '' });
 
   function save() {
     const amount = Number(draft.amount);
@@ -283,7 +300,7 @@ function ExpenseModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="记一笔" onClose={onClose}>
-      <p className="muted">统计页只汇总 2026 年 9 月。</p>
+      <p className="muted">按填写的日期计入对应月份，金额保留到分。</p>
       <form onSubmit={(event) => { event.preventDefault(); save(); }} style={{ marginTop: 12 }}>
         <div className="form-grid">
           <Field label="模块">
@@ -291,7 +308,7 @@ function ExpenseModal({ onClose }: { onClose: () => void }) {
               {SPEND_TAGS.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </Field>
-          <Field label="金额"><input autoFocus required type="number" min={1} step="1" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} /></Field>
+          <Field label="金额"><input autoFocus required type="number" min={0.01} step="0.01" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} /></Field>
           <Field label="日期"><input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></Field>
           <Field label="商户"><input required value={draft.merchant} onChange={(event) => setDraft({ ...draft, merchant: event.target.value })} /></Field>
           <Field label="备注" wide><input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} /></Field>

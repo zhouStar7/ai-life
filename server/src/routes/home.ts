@@ -3,7 +3,8 @@ import type { Hono } from 'hono';
 import { readJson } from '../ids.js';
 import { applyNamedScene, bindScene, syncHome, toggleDevice } from '../homeLink.js';
 import { SEED_DEVICES } from '../seedData.js';
-import { readSnapshot } from '../snapshot.js';
+import { memberOf } from '../auth.js';
+import { readMutationSnapshot, readSnapshot } from '../snapshot.js';
 
 const SCENES = ['回家', '离家', '睡眠', '影院'];
 
@@ -21,22 +22,22 @@ export function registerHome(app: Hono, db: PrismaClient) {
         })),
       });
     }
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/home/sync', async (c) => {
     const error = await syncHome(db);
-    return c.json({ snapshot: await readSnapshot(db), ...(error ? { error } : {}) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c), ...(error ? { error } : {}) });
   });
 
   app.post('/api/devices/:id/toggle', async (c) => {
     const error = await toggleDevice(db, c.req.param('id'));
-    return c.json({ snapshot: await readSnapshot(db), ...(error ? { error } : {}) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c), ...(error ? { error } : {}) });
   });
 
   app.delete('/api/devices/:id', async (c) => {
     await db.device.delete({ where: { id: c.req.param('id') } });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/home/scenes/:name', async (c) => {
@@ -45,25 +46,26 @@ export function registerHome(app: Hono, db: PrismaClient) {
     const target = typeof body.target === 'string' ? body.target : '';
     const error = await bindScene(db, name, target);
     if (error) return c.json({ error }, 400);
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 
   app.post('/api/scenes/:name', async (c) => {
     const name = c.req.param('name');
     if (!SCENES.includes(name)) return c.json({ error: 'invalid' }, 400);
     const scene = await applyNamedScene(db, name);
-    return c.json({ snapshot: await readSnapshot(db), scene });
+    return c.json({ snapshot: await readMutationSnapshot(db, c), scene });
   });
 
   app.post('/api/alerts/:id/handle', async (c) => {
     const id = c.req.param('id');
     await db.alert.update({ where: { id }, data: { handled: true } });
     if (id === 'a-filter') {
-      const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-      const tips = readJson<string[]>(session.adoptedTips, []);
+      const memberId = memberOf(c);
+      const state = await db.memberState.findUniqueOrThrow({ where: { memberId } });
+      const tips = readJson<string[]>(state.adoptedTips, []);
       if (!tips.includes('filter')) tips.push('filter');
-      await db.sessionState.update({ where: { id: 'local' }, data: { adoptedTips: JSON.stringify(tips) } });
+      await db.memberState.update({ where: { memberId }, data: { adoptedTips: JSON.stringify(tips) } });
     }
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readMutationSnapshot(db, c) });
   });
 }

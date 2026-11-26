@@ -10,10 +10,11 @@ import { parseCsv } from './adapters/bills.js';
 import { clothingFromModel } from './adapters/vision.js';
 import { createApp } from './app.js';
 import { seedIfEmpty } from './seed.js';
+import { sessionCookie } from './testSession.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'ai-life-p2-'));
 process.env.DATABASE_URL = `file:${path.join(dir, 'test.sqlite')}`;
-execSync('npx prisma db push --skip-generate', {
+execSync('./node_modules/.bin/prisma db push --skip-generate', {
   cwd: path.join(import.meta.dirname, '..'),
   env: process.env,
   stdio: 'pipe',
@@ -35,10 +36,12 @@ after(async () => {
   await db.$disconnect();
 });
 
+let cookie = '';
 async function json(pathname: string, init?: RequestInit) {
+  if (!cookie) cookie = await sessionCookie(base);
   const response = await fetch(`${base}${pathname}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'content-type': 'application/json', cookie, ...(init?.headers ?? {}) },
   });
   const body = await response.json();
   return { status: response.status, body };
@@ -67,6 +70,7 @@ test('csv keeps the four spend tags and drops income', () => {
   assert.deepEqual(rows.map((row) => row.tag), ['衣', '食', '住', '行', null]);
   assert.equal(rows[0].amount, 199);
   assert.equal(rows[0].date, '2026-09-18');
+  assert.equal(parseCsv('日期,商户,金额,备注\n2026-09-03,面包店,12.34,早餐')[0].amount, 12.34);
   assert.equal(parseCsv('日期,商户,金额,备注\n2026-09-03,面包店,12,早餐')[0].tag, '食');
 });
 
@@ -117,24 +121,35 @@ test('photo recognition needs a model, then confirm writes category color and st
 });
 
 test('csv import updates the month split that feeds the donut and budget', async () => {
-  const before = await json('/api/spending/summary');
+  const before = await json('/api/spending/summary?month=2026-09');
   const preview = await json('/api/bills/preview', { method: 'POST', body: JSON.stringify({ csv: CSV }) });
   assert.equal(preview.status, 200);
   assert.equal(preview.body.rows.length, 5);
+  assert.equal(preview.body.rows.some((row: { duplicate?: boolean }) => row.duplicate), false);
   const imported = await json('/api/bills/import', { method: 'POST', body: JSON.stringify({ rows: preview.body.rows }) });
   assert.equal(imported.status, 200);
   assert.equal(imported.body.imported, 4);
-  const snap = imported.body.snapshot;
-  assert.equal(snap.spending.byTag.衣, before.body.byTag.衣 + 199);
-  assert.equal(snap.spending.byTag.食, before.body.byTag.食 + 36);
-  assert.equal(snap.spending.byTag.住, before.body.byTag.住 + 128);
-  assert.equal(snap.spending.byTag.行, before.body.byTag.行 + 42);
-  assert.equal(snap.spending.monthTotal, before.body.monthTotal + 199 + 36 + 128 + 42);
-  assert.equal(snap.expenses.filter((item: { merchant: string }) => item.merchant === '公司').length, 0);
-  assert.equal(snap.expenses.filter((item: { merchant: string }) => item.merchant === '未知小店').length, 0);
+  const month = await json('/api/spending/summary?month=2026-09');
+  assert.equal(month.body.byTag.衣, before.body.byTag.衣 + 199);
+  assert.equal(month.body.byTag.食, before.body.byTag.食 + 36);
+  assert.equal(month.body.byTag.住, before.body.byTag.住 + 128);
+  assert.equal(month.body.byTag.行, before.body.byTag.行 + 42);
+  assert.equal(month.body.monthTotal, before.body.monthTotal + 199 + 36 + 128 + 42);
+  assert.equal(imported.body.snapshot.expenses.filter((item: { merchant: string }) => item.merchant === '公司').length, 0);
+  assert.equal(imported.body.snapshot.expenses.filter((item: { merchant: string }) => item.merchant === '未知小店').length, 0);
   const budgets = await json('/api/budgets');
-  assert.equal(snap.budgets.total, budgets.body.total);
-  assert.equal(snap.spending.trend.at(-1).amount, snap.spending.monthTotal);
+  assert.equal(imported.body.snapshot.budgets.total, budgets.body.total);
+  assert.equal(month.body.trend.at(-1).amount, month.body.monthTotal);
+  const again = await json('/api/bills/preview', { method: 'POST', body: JSON.stringify({ csv: CSV }) });
+  assert.equal(again.body.rows.filter((row: { duplicate?: boolean; tag?: string }) => row.tag && row.duplicate).length, 4);
+  const repeated = await json('/api/bills/import', { method: 'POST', body: JSON.stringify({ rows: again.body.rows }) });
+  assert.equal(repeated.body.imported, 0);
+  assert.equal(repeated.body.skipped, 4);
+  const cents = await json('/api/expenses', { method: 'POST', body: JSON.stringify({ tag: '食', amount: 12.34, date: '2026-10-13', merchant: '小数面包', note: '早餐' }) });
+  const row = cents.body.snapshot.expenses.find((item: { merchant: string }) => item.merchant === '小数面包');
+  assert.equal(Math.round(row.amount * 100), 1234);
+  const october = await json('/api/spending/summary?month=2026-10');
+  assert.equal(Math.round(october.body.monthTotal * 100), 1234);
 });
 
 test('bill screenshot uses the model and skips income', async () => {

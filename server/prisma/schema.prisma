@@ -13,8 +13,32 @@ model Profile {
   modelBase String @default("")
   modelName String @default("")
   modelKey  String @default("")
-  haBase    String @default("")
-  haToken   String @default("")
+  haBase     String  @default("")
+  haToken    String  @default("")
+  moneyCents Boolean @default(false)
+}
+
+model Member {
+  id           String @id
+  username     String @unique
+  name         String
+  passwordHash String
+  createdAt    String
+}
+
+model AuthSession {
+  token     String @id
+  memberId  String
+  expiresAt String
+}
+
+model MemberState {
+  memberId        String  @id
+  suggestionIndex Int     @default(0)
+  outfitAdopted   Boolean @default(false)
+  activeOutfitId  String?
+  activeTripId    String  @default("")
+  adoptedTips     String  @default("[]")
 }
 
 model SessionState {
@@ -33,6 +57,7 @@ model SessionState {
 
 model WardrobeItem {
   id        String @id
+  memberId  String @default("m-xingyu")
   name      String
   category  String
   season    String
@@ -40,44 +65,52 @@ model WardrobeItem {
   occasion  String
   wears     Int
   createdAt String
+  cover     String @default("")
+  priceCents Int?
+
+  @@index([memberId, createdAt])
 }
 
 model Outfit {
   id       String  @id
+  memberId String  @default("m-xingyu")
   name     String
   itemIds  String
   favorite Boolean
 }
 
 model Meal {
-  id      String @id
-  slot    String
-  name    String
-  time    String
-  date    String @default("2026-09-22")
-  kcal    Int
-  protein Int
-  carb    Int
-  fat     Int
+  id       String @id
+  memberId String @default("m-xingyu")
+  slot     String
+  name     String
+  time     String
+  date     String @default("2026-09-22")
+  kcal     Int
+  protein  Int
+  carb     Int
+  fat      Int
 }
 
 model Recipe {
-  id      String @id
-  name    String
-  tags    String
-  slot    String
-  kcal    Int
-  protein Int
-  carb    Int
-  fat     Int
+  id       String @id
+  memberId String @default("m-xingyu")
+  name     String
+  tags     String
+  slot     String
+  kcal     Int
+  protein  Int
+  carb     Int
+  fat      Int
 }
 
 model NutritionTarget {
-  id      String @id
-  kcal    Int
-  protein Int
-  carb    Int
-  fat     Int
+  id       String @id
+  memberId String @unique @default("m-xingyu")
+  kcal     Int
+  protein  Int
+  carb     Int
+  fat      Int
 }
 
 model Device {
@@ -102,10 +135,13 @@ model Alert {
 
 model Trip {
   id          String  @id
+  memberId    String  @default("m-xingyu")
   title       String
   status      String
   transport   String
   dateLabel   String
+  startDate   String?
+  endDate     String?
   tickets     String
   timeline    String
   packing     String
@@ -113,33 +149,66 @@ model Trip {
 }
 
 model Expense {
-  id       String @id
-  tag      String
-  amount   Int
-  date     String
-  merchant String
-  note     String
-  tripId   String @default("")
+  id          String  @id
+  memberId    String  @default("m-xingyu")
+  tag         String
+  amount      Int
+  date        String
+  merchant    String
+  note        String
+  tripId      String  @default("")
+  fingerprint String?
+
+  @@index([memberId, date, id])
+  @@index([memberId, tripId])
+
+  @@unique([memberId, fingerprint])
+}
+
+model ActionRun {
+  id          String @id
+  fingerprint String @unique
+  type        String
+  status      String
+  detail      String @default("")
 }
 
 model PackingTemplate {
-  id    String @id
-  name  String
-  items String
+  id       String @id
+  memberId String @default("m-xingyu")
+  name     String
+  items    String
 }
 
 model Budget {
-  id    String @id
-  total Int
-  cloth Int
-  food  Int
-  home  Int
-  trip  Int
+  id       String @id
+  memberId String @unique @default("m-xingyu")
+  total    Int
+  cloth    Int
+  food     Int
+  home     Int
+  trip     Int
 }
 
 model Notice {
-  id     String  @id
-  outfit Boolean
-  budget Boolean
-  device Boolean
+  id       String  @id
+  memberId String  @unique @default("m-xingyu")
+  outfit   Boolean
+  budget   Boolean
+  device   Boolean
+}
+
+model MutationReceipt {
+  memberId String
+  key String
+  signature String
+  status Int
+  response String
+  createdAt DateTime @default(now())
+  @@id([memberId, key])
+}
+
+model WardrobePhoto {
+  id String @id
+  data String
 }
