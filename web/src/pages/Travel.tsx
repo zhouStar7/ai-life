@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useLocalDate } from '../localDate';
 import { reportMonth, monthExpenses, sumAmount, yuan } from '../format';
 import { modelDestination } from '../../../shared/modelEndpoint';
+import { tripDateLabel, tripStatus, type TripDates } from '../../../shared/trips';
 import { useStore } from '../store';
-import type { ItineraryDraft, Trip, TripChain, TripStatus } from '../types';
+import type { ItineraryDraft, Trip, TripChain } from '../types';
 import { Empty, Field, Modal, Progress, SpendCard } from '../components/ui';
 
 export function TravelPage() {
@@ -40,41 +41,47 @@ export function TravelPage() {
               {store.trips.map((item) => (
                 <button type="button" key={item.id} className={item.id === trip.id ? 'trip active' : 'trip'} onClick={() => store.selectTrip(item.id)}>
                   <strong>{item.title}</strong>
-                  <p>{item.status} · {item.transport}</p>
+                  <p>{tripStatus(item, today)} · {item.transport}</p>
                   <small>{item.dateLabel}</small>
                 </button>
               ))}
             </div>
-            <article className="card">
+            <article className="card travel-detail">
               <div className="page-head">
                 <div>
                   <h2>{trip.title}</h2>
-                  <p className="muted">{trip.status} · {trip.transport} · {trip.dateLabel}</p>
+                  <p className="muted">{tripStatus(trip, today)} · {trip.transport} · {trip.dateLabel}</p>
                 </div>
                 <button type="button" className="btn-text" onClick={() => store.removeTrip(trip.id)}>删除行程</button>
               </div>
-              <h3 className="section-title">时间线</h3>
-              <ul className="timeline">
-                {trip.timeline.map((node) => (
-                  <li key={`${node.time}-${node.title}`}>
-                    <strong>{node.title}</strong>
-                    <p className="muted">{node.time} · {node.detail}</p>
-                  </li>
-                ))}
-              </ul>
-              <h3 className="section-title" style={{ marginTop: 8 }}>票务与酒店</h3>
-              {trip.tickets.length === 0 ? (
-                <p className="callout">还没有票务或酒店订单。行李清单和准备建议仍然可以用。</p>
-              ) : (
-                <div className="tickets">
-                  {trip.tickets.map((ticket) => (
-                    <div className="ticket" key={ticket.label}>
-                      <strong>{ticket.label}</strong>
-                      <p><small>{ticket.status}</small></p>
+              <div className="travel-columns">
+                <section>
+                  <h3 className="section-title">时间线</h3>
+                  <ul className="timeline">
+                    {trip.timeline.map((node) => (
+                      <li key={`${node.time}-${node.title}`}>
+                        <strong>{node.title}</strong>
+                        <p className="muted">{node.time} · {node.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                <section>
+                  <h3 className="section-title">票务与酒店</h3>
+                  {trip.tickets.length === 0 ? (
+                    <p className="callout">还没有票务或酒店订单。行李清单和准备建议仍然可以用。</p>
+                  ) : (
+                    <div className="tickets">
+                      {trip.tickets.map((ticket) => (
+                        <div className="ticket" key={ticket.label}>
+                          <strong>{ticket.label}</strong>
+                          <p><small>{ticket.status}</small></p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
+                </section>
+              </div>
             </article>
           </section>
           <aside className="stack">
@@ -108,7 +115,7 @@ export function TravelPage() {
           </aside>
         </div>
       )}
-      {creating ? <TripModal onClose={() => setCreating(false)} /> : null}
+      {creating ? <TripModal today={today} onClose={() => setCreating(false)} /> : null}
       {pasting ? <PasteModal onClose={() => setPasting(false)} /> : null}
     </>
   );
@@ -138,6 +145,7 @@ function PasteModal({ onClose }: { onClose: () => void }) {
               <Field label="行程名称" wide><input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} /></Field>
               <Field label="交通方式"><input value={draft.transport} onChange={e => setDraft({ ...draft, transport: e.target.value })} /></Field>
               <Field label="行程日期"><input value={draft.dateLabel} onChange={e => setDraft({ ...draft, dateLabel: e.target.value })} /></Field>
+              <TripDateFields dates={draft} onChange={dates => setDraft({ ...draft, ...dates, dateLabel: tripDateLabel(dates) })} />
             </div>
             {draft.timeline.map((node, i) => <fieldset key={i} className="form-grid"><legend>时间线 {i + 1}</legend>
               {(['title', 'time', 'detail'] as const).map((field, j) => <Field key={field} label={['事件', '时间', '地点'][j]}><input value={node[field]} onChange={e => setDraft({ ...draft, timeline: draft.timeline.map((other, k) => i === k ? { ...node, [field]: e.target.value } : other) })} /></Field>)}
@@ -154,7 +162,7 @@ function PasteModal({ onClose }: { onClose: () => void }) {
       <div className="modal-actions">
         <button type="button" className="btn-ghost" onClick={onClose}>取消</button>
         <button type="button" className="btn-ghost" disabled={reading || !text.trim()} onClick={() => { void read(); }}>{reading ? '读取中…' : '生成'}</button>
-        <button type="button" className="btn" disabled={store.saving || !draft?.title.trim() || !draft.timeline.every(node => node.title.trim() && node.time.trim() && node.detail.trim())} onClick={() => { if (!draft) return; void store.importTrip(draft).then((ok) => { if (ok) onClose(); }); }}>{draft?.existingTrip ? '打开已有行程' : '写入行程'}</button>
+        <button type="button" className="btn" disabled={store.saving || !draft?.title.trim() || invalidDateRange(draft) || !draft.timeline.every(node => node.title.trim() && node.time.trim() && node.detail.trim())} onClick={() => { if (!draft) return; void store.importTrip(draft).then((ok) => { if (ok) onClose(); }); }}>{draft?.existingTrip ? '打开已有行程' : '写入行程'}</button>
       </div>
     </Modal>
   );
@@ -238,19 +246,25 @@ function TripSpend({ trip, month }: { trip: Trip; month: string }) {
   );
 }
 
-function TripModal({ onClose }: { onClose: () => void }) {
+function invalidDateRange({ startDate, endDate }: TripDates) {
+  return Boolean(startDate && endDate && endDate < startDate);
+}
+
+function TripDateFields({ dates, onChange }: { dates: TripDates; onChange: (dates: TripDates) => void }) {
+  const { startDate, endDate } = dates;
+  return <>
+    <Field label="出发日期"><input type="date" value={startDate || ''} onChange={event => onChange({ startDate: event.target.value, endDate })} /></Field>
+    <Field label="结束日期"><input type="date" min={startDate || undefined} value={endDate || ''} onChange={event => onChange({ startDate, endDate: event.target.value })} /></Field>
+    {invalidDateRange(dates) && <p role="alert" className="muted">结束日期须为出发当天或之后。</p>}
+  </>;
+}
+
+function TripModal({ today, onClose }: { today: string; onClose: () => void }) {
   const store = useStore();
-  const [draft, setDraft] = useState<Pick<Trip, 'title' | 'status' | 'transport' | 'dateLabel'>>({
-    title: '',
-    status: '即将开始',
-    transport: '高铁',
-    dateLabel: '',
-  });
+  const [draft, setDraft] = useState<Pick<Trip, 'title' | 'transport'> & TripDates>({ title: '', transport: '高铁' });
 
   function applyTemplate(kind: 'weekend' | 'work') {
-    setDraft(kind === 'weekend'
-      ? { title: '周末短途', status: '即将开始', transport: '高铁', dateLabel: '日期待定' }
-      : { title: '商务出差', status: '即将开始', transport: '飞机', dateLabel: '日期待定' });
+    setDraft(kind === 'weekend' ? { title: '周末短途', transport: '高铁' } : { title: '商务出差', transport: '飞机' });
   }
 
   return (
@@ -259,21 +273,21 @@ function TripModal({ onClose }: { onClose: () => void }) {
         <button type="button" className="pill" onClick={() => applyTemplate('weekend')}>周末模板</button>
         <button type="button" className="pill" onClick={() => applyTemplate('work')}>出差模板</button>
       </div>
-      <form onSubmit={async (event) => { event.preventDefault(); if (!draft.title.trim()) return; if (await store.addTrip({ ...draft, title: draft.title.trim(), dateLabel: draft.dateLabel.trim() || '日期待定' })) onClose(); }}>
+      <form onSubmit={async (event) => {
+        event.preventDefault();
+        const title = draft.title.trim();
+        if (!title || invalidDateRange(draft)) return;
+        const dates = { startDate: draft.startDate || draft.endDate || null, endDate: draft.endDate || draft.startDate || null };
+        if (await store.addTrip({ ...draft, ...dates, title, status: tripStatus(dates, today), dateLabel: tripDateLabel(dates) })) onClose();
+      }}>
         <div className="form-grid" style={{ marginTop: 12 }}>
           <Field label="名称" wide><input autoFocus required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></Field>
-          <Field label="状态">
-            <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TripStatus })}>
-              <option>即将开始</option>
-              <option>进行中</option>
-            </select>
-          </Field>
           <Field label="交通"><input value={draft.transport} onChange={(event) => setDraft({ ...draft, transport: event.target.value })} /></Field>
-          <Field label="日期" wide><input placeholder="例如 10月2日 – 10月4日" value={draft.dateLabel} onChange={(event) => setDraft({ ...draft, dateLabel: event.target.value })} /></Field>
+          <TripDateFields dates={draft} onChange={dates => setDraft({ ...draft, ...dates })} />
         </div>
         <div className="modal-actions">
           <button type="button" className="btn-ghost" onClick={onClose}>取消</button>
-          <button type="submit" disabled={store.saving} className="btn">创建</button>
+          <button type="submit" disabled={store.saving || invalidDateRange(draft)} className="btn">创建</button>
         </div>
       </form>
     </Modal>

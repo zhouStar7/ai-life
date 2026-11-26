@@ -39,20 +39,19 @@ export function fallbackPlan(text: string, adoptedTips: string[]): ArrangeResult
   };
 }
 
-export function planFromModel(text: string, content: string, adoptedTips: string[]): ArrangeResult {
+export function planFromModel(text: string, content: string, adoptedTips: string[], demo = false): ArrangeResult {
   const intent = routeIntent(text);
   const parsed = extract(content);
   const modelActions = parseActions(parsed?.actions);
-  const actions = intent === 'cross'
-    ? (coversCross(modelActions) ? modelActions : crossActions())
-    : modelActions;
+  const demoFallback = demo && intent === 'cross' && !coversCross(modelActions);
+  const actions = demoFallback ? crossActions() : modelActions;
   const href = typeof parsed?.href === 'string' && ROUTES.includes(parsed.href) ? parsed.href : intentHref(intent);
   const lines = Array.isArray(parsed?.lines) ? parsed.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0) : [];
   const key = intentKey(intent);
   return {
     key,
-    title: typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title.trim() : '衣食住行支已经串在一起',
-    lines: lines.length > 0 ? lines : DEFAULT_LINES[intent],
+    title: typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title.trim() : '今天的安排',
+    lines: lines.length > 0 ? lines : demoFallback ? DEFAULT_LINES[intent] : ['暂无可展示的建议。'],
     href,
     actions,
     adopted: adoptedTips.includes(key),

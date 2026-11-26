@@ -1,8 +1,10 @@
+import { inferTripDates, type TripDates, type TripStatus } from '../../../shared/trips.js';
 import { extractJson } from '../json.js';
+import { localDate } from '../localDate.js';
 
-export type ItineraryDraft = {
+export type ItineraryDraft = TripDates & {
   title: string;
-  status: '即将开始';
+  status: TripStatus;
   transport: string;
   dateLabel: string;
   tickets: { label: string; status: string }[];
@@ -19,11 +21,11 @@ export function parseItinerary(text: string): ItineraryDraft | null {
   let transport = '';
   let destination = '';
 
-  const flight = source.match(/(\d{1,2})月(\d{1,2})日\s*([A-Z]{2}\d{3,4})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:起飞|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
-  const flightMail = source.match(/航班\s*([A-Z]{2}\d{3,4})[\s\S]*?出发[:：]\s*(\d{4})-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)[\s\S]*?到达[:：]\s*\d{4}-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)/);
-  const train = source.match(/(\d{1,2})月(\d{1,2})日\s*([GDC]\d{2,5})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:开|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
+  const flight = source.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*([A-Z]{2}\d{3,4})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:起飞|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
+  const flightMail = source.match(/航班\s*([A-Z]{2}\d{3,4})[\s\S]*?出发[:：]\s*(\d{4})-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)[\s\S]*?到达[:：]\s*(\d{4})-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)/);
+  const train = source.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*([GDC]\d{2,5})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:开|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
 
-  const railNotice = source.match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}:\d{2})\s*([\p{Script=Han}]{2,16}?)站?开\s*([GDCZTK]\d{1,5})次[^。\n]{0,40}?[（(，,]\s*([\p{Script=Han}]{2,16}?)(?:至|到|[—-])([\p{Script=Han}]{2,16}?)(?:[）)，,。\s]|$)/u);
+  const railNotice = source.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*(\d{1,2}:\d{2})\s*([\p{Script=Han}]{2,16}?)站?开\s*([GDCZTK]\d{1,5})次[^。\n]{0,40}?[（(，,]\s*([\p{Script=Han}]{2,16}?)(?:至|到|[—-])([\p{Script=Han}]{2,16}?)(?:[）)，,。\s]|$)/u);
   const mailCode = source.match(/航班(?:号|编号)?\s*[:：]?\s*([A-Z0-9]{2}\d{3,4})/i);
   const mailStop = (field: string) => source.match(new RegExp(`(?:${field})[:：]\\s*(\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})[ \\t]+(\\d{1,2}:\\d{2})[ \\t]+([^\\n，,。]+)`));
   const departure = mailStop('起飞时间|起飞|出发时间|出发');
@@ -37,7 +39,7 @@ export function parseItinerary(text: string): ItineraryDraft | null {
     days.push(date);
     tickets.push({ label: code, status: '已出票' });
     timeline.push({ time: `${date} ${depart}`, title: '出发', detail: from }, { time: '待确认', title: '抵达', detail: to });
-  } else if (mailCode && departure && arrival && !flightMail) {
+  } else if (mailCode && departure && arrival) {
     transport = '飞机';
     destination = city(arrival[3].trim());
     tickets.push({ label: mailCode[1].toUpperCase(), status: '已出票' });
@@ -47,55 +49,51 @@ export function parseItinerary(text: string): ItineraryDraft | null {
       timeline.push({ time: `${date} ${stop[2]}`, title, detail: stop[3].trim() });
     }
   } else if (railNotice) {
-    const [, month, day, depart, from, code, , to] = railNotice;
+    const [, year, month, day, depart, from, code, , to] = railNotice;
     transport = /^[GDC]/.test(code) ? '高铁' : '火车';
     destination = city(to);
-    days.push(labelDay(month, day));
+    days.push(`${year ? `${year}年` : ''}${labelDay(month, day)}`);
     tickets.push({ label: code, status: '已出票' });
-    timeline.push({ time: clock(month, day, depart), title: '出发', detail: from });
+    timeline.push({ time: clock(month, day, depart, year), title: '出发', detail: from });
     timeline.push({ time: '待确认', title: '抵达', detail: to });
   } else if (flight) {
-    const [, month, day, code, from, depart, arrive, to] = flight;
+    const [, year, month, day, code, from, depart, arrive, to] = flight;
     transport = '飞机';
     destination = city(to);
-    days.push(labelDay(month, day));
+    days.push(labelDay(month, day, year));
     tickets.push({ label: code, status: '已出票' });
-    timeline.push({ time: clock(month, day, depart), title: '出发', detail: from });
-    timeline.push({ time: clock(month, day, arrive), title: '抵达', detail: to });
+    timeline.push({ time: clock(month, day, depart, year), title: '出发', detail: from });
+    timeline.push({ time: clock(month, day, arrive, year), title: '抵达', detail: to });
   } else if (flightMail) {
-    const [, code, , month, day, depart, from, arriveMonth, arriveDay, arrive, to] = flightMail;
+    const [, code, departYear, month, day, depart, from, arriveYear, arriveMonth, arriveDay, arrive, to] = flightMail;
     transport = '飞机';
     destination = city(to);
-    days.push(labelDay(month, day), labelDay(arriveMonth, arriveDay));
+    days.push(`${departYear}-${month}-${day}`, `${arriveYear}-${arriveMonth}-${arriveDay}`);
     tickets.push({ label: code, status: '已出票' });
-    timeline.push({ time: clock(month, day, depart), title: '出发', detail: from });
-    timeline.push({ time: clock(arriveMonth, arriveDay, arrive), title: '抵达', detail: to });
+    timeline.push({ time: `${days[0]} ${depart}`, title: '出发', detail: from });
+    timeline.push({ time: `${days[1]} ${arrive}`, title: '抵达', detail: to });
   } else if (train) {
-    const [, month, day, code, from, depart, arrive, to] = train;
+    const [, year, month, day, code, from, depart, arrive, to] = train;
     transport = '高铁';
     destination = city(to);
-    days.push(labelDay(month, day));
+    days.push(labelDay(month, day, year));
     tickets.push({ label: code, status: '已出票' });
-    timeline.push({ time: clock(month, day, depart), title: '出发', detail: from });
-    timeline.push({ time: clock(month, day, arrive), title: '抵达', detail: to });
+    timeline.push({ time: clock(month, day, depart, year), title: '出发', detail: from });
+    timeline.push({ time: clock(month, day, arrive, year), title: '抵达', detail: to });
   }
 
-  const hotel = source.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24}酒店)\s*(\d{1,2})月(\d{1,2})日入住[，,\s]*(\d{1,2})月(\d{1,2})日(?:离店|退房)/);
-  const hotelMail = source.match(/酒店[:：]\s*([^\n]{2,30})[\s\S]*?入住[:：]\s*(\d{1,2})月(\d{1,2})日[\s\S]*?离店[:：]\s*(\d{1,2})月(\d{1,2})日/);
-  if (hotel) {
-    const [, name, inMonth, inDay, outMonth, outDay] = hotel;
-    tickets.push({ label: name, status: /已确认|确认/.test(source) ? '已确认' : '待确认' });
-    timeline.push({ time: labelDay(inMonth, inDay), title: '入住', detail: name });
-    timeline.push({ time: labelDay(outMonth, outDay), title: '离店', detail: name });
-    days.push(labelDay(inMonth, inDay), labelDay(outMonth, outDay));
-    if (!destination) destination = city(name);
-  } else if (hotelMail) {
-    const [, name, inMonth, inDay, outMonth, outDay] = hotelMail;
+  const hotel = source.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24}酒店)\s*(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日入住[，,\s]*(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日(?:离店|退房)/);
+  const hotelMail = source.match(/酒店[:：]\s*([^\n]{2,30})[\s\S]*?入住[:：]\s*(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日[\s\S]*?离店[:：]\s*(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/);
+  const stay = hotel ?? hotelMail;
+  if (stay) {
+    const [, name, inYear, inMonth, inDay, outYear, outMonth, outDay] = stay;
     const hotelName = name.trim();
-    tickets.push({ label: hotelName, status: '已确认' });
-    timeline.push({ time: labelDay(inMonth, inDay), title: '入住', detail: hotelName });
-    timeline.push({ time: labelDay(outMonth, outDay), title: '离店', detail: hotelName });
-    days.push(labelDay(inMonth, inDay), labelDay(outMonth, outDay));
+    const checkIn = labelDay(inMonth, inDay, inYear);
+    const checkOut = labelDay(outMonth, outDay, outYear);
+    tickets.push({ label: hotelName, status: hotel ? (/确认/.test(source) ? '已确认' : '待确认') : '已确认' });
+    timeline.push({ time: checkIn, title: '入住', detail: hotelName });
+    timeline.push({ time: checkOut, title: '离店', detail: hotelName });
+    days.push(checkIn, checkOut);
     if (!destination) destination = city(hotelName);
   }
 
@@ -108,23 +106,25 @@ export function parseItinerary(text: string): ItineraryDraft | null {
   if (/雨/.test(source)) packing.push('雨伞');
   else if (/降温|寒冷|冷/.test(source)) packing.push('保暖内胆');
   const uniqueDays = [...new Set(days)];
+  const dateLabel = uniqueDays.length > 1 ? `${uniqueDays[0]} – ${uniqueDays.at(-1)}` : (uniqueDays[0] || '日期待定');
   return {
     title: `${destination || '出行'}行程`,
     status: '即将开始',
     transport: transport || '其他',
-    dateLabel: uniqueDays.length > 1 ? `${uniqueDays[0]} – ${uniqueDays[uniqueDays.length - 1]}` : (uniqueDays[0] || '日期待定'),
+    dateLabel,
+    ...inferTripDates(dateLabel, timeline.map(node => node.time), localDate()),
     tickets,
     timeline,
     packing,
   };
 }
 
-function labelDay(month: string, day: string) {
-  return `${Number(month)}月${Number(day)}日`;
+function labelDay(month: string, day: string, year?: string) {
+  return `${year ? `${year}年` : ''}${Number(month)}月${Number(day)}日`;
 }
 
-function clock(month: string, day: string, time: string) {
-  return `${Number(month).toString().padStart(2, '0')}-${Number(day).toString().padStart(2, '0')} ${time}`;
+function clock(month: string, day: string, time: string, year?: string) {
+  return `${year ? `${year}-` : ''}${month.padStart(2, '0')}-${day.padStart(2, '0')} ${time}`;
 }
 
 function city(place: string) {
@@ -142,23 +142,19 @@ function loosen(
   setTransport: (value: string) => void,
   setDestination: (value: string) => void,
 ) {
-  const flight = source.match(/([A-Z]{2}\d{3,4})[\s\S]{0,40}?(\d{1,2})月(\d{1,2})日[\s\S]{0,30}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?)\s*(?:起飞|出发)[\s\S]{0,20}?(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
-  const train = source.match(/(?:车次\s*)?([GDC]\d{2,5})[\s\S]{0,30}?(\d{1,2})月(\d{1,2})日[\s\S]{0,24}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?)\s*(?:开|出发)[\s\S]{0,16}?(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
+  const flight = source.match(/([A-Z]{2}\d{3,4})[\s\S]{0,40}?(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日[\s\S]{0,30}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?)\s*(?:起飞|出发)[\s\S]{0,20}?(\d{1,2}:\d{2})\s*(?:抵达|到达)\s*([^\s，,。]{2,20})/);
+  const train = source.match(/(?:车次\s*)?([GDC]\d{2,5})[\s\S]{0,30}?(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日[\s\S]{0,24}?(\d{1,2}:\d{2})\s*(?:从)?\s*([^\s，,。]{2,16}?)\s*(?:开|出发)[\s\S]{0,16}?(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
   const dated = source.match(/(\d{4})[-/.](\d{2})[-/.](\d{2})\s+(\d{1,2}:\d{2})\s+(\S+)\s*(?:起飞|出发|开)[\s\S]{0,40}?(\d{1,2}:\d{2})\s*(?:抵达|到达|到)\s*(\S+)/);
-  const picked = flight
-    ? { kind: '飞机' as const, code: flight[1], month: flight[2], day: flight[3], depart: flight[4], from: flight[5], arrive: flight[6], to: flight[7] }
-    : train
-      ? { kind: '高铁' as const, code: train[1], month: train[2], day: train[3], depart: train[4], from: train[5], arrive: train[6], to: train[7] }
-      : dated
-        ? { kind: (/[GDC]\d{2,5}/.test(source) ? '高铁' : '飞机') as '高铁' | '飞机', code: (source.match(/[A-Z]{2}\d{3,4}|[GDC]\d{2,5}/) || ['行程'])[0], month: String(Number(dated[2])), day: String(Number(dated[3])), depart: dated[4], from: dated[5], arrive: dated[6], to: dated[7] }
-        : null;
-  if (!picked) return;
-  setTransport(picked.kind);
-  setDestination(city(picked.to));
-  days.push(labelDay(picked.month, picked.day));
-  tickets.push({ label: picked.code, status: '已出票' });
-  timeline.push({ time: clock(picked.month, picked.day, picked.depart), title: '出发', detail: picked.from });
-  timeline.push({ time: clock(picked.month, picked.day, picked.arrive), title: '抵达', detail: picked.to });
+  const ticketCode = source.match(/[A-Z]{2}\d{3,4}|[GDC]\d{2,5}/)?.[0] ?? '行程';
+  const ticket = flight ?? train ?? (dated && [dated[0], ticketCode, ...dated.slice(1)]);
+  if (!ticket) return;
+  const [, code, year, month, day, depart, from, arrive, to] = ticket;
+  setTransport(/^[GDC]\d/.test(code) ? '高铁' : '飞机');
+  setDestination(city(to));
+  days.push(labelDay(month, day, year));
+  tickets.push({ label: code, status: '已出票' });
+  timeline.push({ time: clock(month, day, depart, year), title: '出发', detail: from });
+  timeline.push({ time: clock(month, day, arrive, year), title: '抵达', detail: to });
 }
 
 function loosenHotel(
@@ -168,13 +164,15 @@ function loosenHotel(
   days: string[],
   setDestination: (value: string) => void,
 ) {
-  const hotel = source.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24}酒店)[\s\S]{0,24}?(\d{1,2})月(\d{1,2})日\s*(?:入住|到店)[\s\S]{0,24}?(\d{1,2})月(\d{1,2})日\s*(?:离店|退房|离开)/);
+  const hotel = source.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24}酒店)[\s\S]{0,24}?(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*(?:入住|到店)[\s\S]{0,24}?(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*(?:离店|退房|离开)/);
   if (!hotel) return;
-  const [, name, inMonth, inDay, outMonth, outDay] = hotel;
-  tickets.push({ label: name, status: /已确认|确认|预订/.test(source) ? '已确认' : '待确认' });
-  timeline.push({ time: labelDay(inMonth, inDay), title: '入住', detail: name });
-  timeline.push({ time: labelDay(outMonth, outDay), title: '离店', detail: name });
-  days.push(labelDay(inMonth, inDay), labelDay(outMonth, outDay));
+  const [, name, inYear, inMonth, inDay, outYear, outMonth, outDay] = hotel;
+  const checkIn = labelDay(inMonth, inDay, inYear);
+  const checkOut = labelDay(outMonth, outDay, outYear);
+  tickets.push({ label: name, status: /确认|预订/.test(source) ? '已确认' : '待确认' });
+  timeline.push({ time: checkIn, title: '入住', detail: name });
+  timeline.push({ time: checkOut, title: '离店', detail: name });
+  days.push(checkIn, checkOut);
   setDestination(city(name));
 }
 
@@ -210,11 +208,13 @@ export function draftFromModel(content: string): ItineraryDraft | null {
     : [];
   const destination = typeof row.destination === 'string' ? row.destination.trim() : '';
   const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : `${destination || '出行'}行程`;
+  const dateLabel = typeof row.dateLabel === 'string' && row.dateLabel.trim() ? row.dateLabel.trim() : '日期待定';
   return {
     title,
     status: '即将开始',
     transport,
-    dateLabel: typeof row.dateLabel === 'string' && row.dateLabel.trim() ? row.dateLabel.trim() : '日期待定',
+    dateLabel,
+    ...inferTripDates(dateLabel, timeline.map(node => node.time), localDate()),
     tickets,
     timeline,
     packing: packing.length > 0 ? packing : ['身份证', '充电器', '换洗衣物'],

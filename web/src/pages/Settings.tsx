@@ -6,6 +6,8 @@ import { localOllamaBase } from '../../../shared/modelEndpoint';
 import { ModelCheck } from '../components/ModelCheck';
 import { PackingCache } from '../components/PackingCache';
 import { WeatherSettings } from '../components/WeatherSettings';
+import { api, errorDetail } from '../api/client';
+import { useAuth } from '../auth';
 import { yuan } from '../format';
 
 export function SettingsPage() {
@@ -27,11 +29,9 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <header className="page-head">
-        <div>
-          <h1 className="display" style={{ fontSize: 32 }}>设置</h1>
-          <p className="muted">预算和数据来源留在这里。</p>
-        </div>
+        <h1 className="display">设置</h1>
       </header>
+      <AccountSettings />
       <article className="card">
         <h2>月预算</h2>
         <p className="muted">支出统计和各模块预算条会读这里的数字。</p>
@@ -109,5 +109,57 @@ export function SettingsPage() {
         </select></label><button className="btn-ghost" disabled={!store.devices.some((d) => d.id === testDevice && !d.offline) || store.saving} onClick={() => store.toggleDevice(testDevice)}>预览测试动作</button></div>}
       </article>
     </div>
+  );
+}
+
+const blankMember = { username: '', name: '', password: '' };
+
+function AccountSettings() {
+  const { session, offlineAccount, logout } = useAuth();
+  const account = session?.member;
+  const [draft, setDraft] = useState(blankMember);
+  const [result, setResult] = useState<{ text: string; error: boolean }>();
+  const [saving, setSaving] = useState(false);
+
+  if (!account && !offlineAccount) return null;
+
+  async function addMember() {
+    if (saving) return;
+    setSaving(true);
+    setResult(undefined);
+    try {
+      await api('/api/auth/members', { method: 'POST', body: JSON.stringify(draft) });
+      setDraft(blankMember);
+      setResult({ text: '成员已添加，可以用新账号登录。', error: false });
+    } catch (error) {
+      setResult({ text: errorDetail(error), error: true });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="card account-settings">
+      <div className="account-summary">
+        <div>
+          <h2>我的账号</h2>
+          <p className="muted">{account ? `${account.name}（${account.username}）` : '离线账号'}</p>
+        </div>
+        <button type="button" className="btn-ghost" onClick={() => void logout()}>退出登录</button>
+      </div>
+      {account?.isOwner && (
+        <form onSubmit={(event) => { event.preventDefault(); void addMember(); }}>
+          <h3>添加家庭成员</h3>
+          <p className="muted">成员各自管理衣橱、饮食、行程和账单。家居设备和模型连接由家庭共用。</p>
+          <fieldset className="form-grid member-fields" disabled={saving}>
+            <Field label="用户名"><input autoComplete="off" autoCapitalize="none" spellCheck={false} required minLength={2} maxLength={32} value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} /></Field>
+            <Field label="显示名"><input autoComplete="off" required maxLength={20} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field>
+            <Field label="密码"><input type="password" autoComplete="new-password" required minLength={6} maxLength={72} value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} /></Field>
+          </fieldset>
+          {result && <p className="note" role={result.error ? 'alert' : 'status'}>{result.text}</p>}
+          <div className="modal-actions"><button type="submit" className="btn" disabled={saving}>{saving ? '正在添加…' : '添加成员'}</button></div>
+        </form>
+      )}
+    </article>
   );
 }

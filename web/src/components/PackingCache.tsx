@@ -10,7 +10,7 @@ export function PackingCache({ offline = false }: { offline?: boolean }) {
     let revision = 0;
     function refresh() {
       const current = ++revision;
-      loadSnapshot().then(value => {
+      loadSnapshot(store.cacheMemberId, store.cacheSession).then(value => {
         if (revision === current) { setSnapshot(value); setError(''); }
       }).catch(() => { if (revision === current) setError('浏览器暂时无法读取离线缓存。'); });
     }
@@ -22,10 +22,10 @@ export function PackingCache({ offline = false }: { offline?: boolean }) {
       window.removeEventListener(CACHE_CHANGED, refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, []);
+  }, [store.cacheMemberId, store.cacheSession]);
 
   async function clear() {
-    try { await clearSnapshot(); }
+    try { await clearSnapshot(store.cacheMemberId); }
     catch { setError('缓存清除失败，请重试。'); }
   }
 

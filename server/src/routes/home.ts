@@ -5,6 +5,7 @@ import { bindScene, syncHome } from '../homeLink.js';
 import { homeActions, type HomeTarget } from '../homeActions.js';
 import { SEED_DEVICES } from '../seedData.js';
 import { readSnapshot } from '../snapshot.js';
+import { currentMemberId } from '../requestContext.js';
 
 const SCENES = ['回家', '离家', '睡眠', '影院'];
 
@@ -64,13 +65,17 @@ export function registerHome(app: Hono, db: PrismaClient) {
 
   app.post('/api/alerts/:id/handle', async (c) => {
     const id = c.req.param('id');
-    await db.alert.update({ where: { id }, data: { handled: true } });
-    if (id === 'a-filter') {
-      const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-      const tips = readJson<string[]>(session.adoptedTips, []);
-      if (!tips.includes('filter')) tips.push('filter');
-      await db.sessionState.update({ where: { id: 'local' }, data: { adoptedTips: JSON.stringify(tips) } });
-    }
+    await db.$transaction(async (tx) => {
+      await tx.alert.update({ where: { id }, data: { handled: true } });
+      if (id === 'a-filter') {
+        const where = { memberId: currentMemberId() };
+        const state = await tx.memberState.findUniqueOrThrow({ where });
+        const tips = readJson<string[]>(state.adoptedTips, []);
+        if (!tips.includes('filter')) {
+          await tx.memberState.update({ where, data: { adoptedTips: JSON.stringify([...tips, 'filter']) } });
+        }
+      }
+    });
     return c.json({ snapshot: await readSnapshot(db) });
   });
 }

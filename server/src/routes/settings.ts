@@ -5,13 +5,15 @@ import { checkCapability, discoverModels } from '../adapters/model.js';
 import { modelEndpoint } from '../../../shared/modelEndpoint.js';
 import { readWeather, weatherCities } from '../adapters/weather.js';
 import { readSnapshot } from '../snapshot.js';
+import { currentMemberId } from '../requestContext.js';
 
 export function registerSettings(app: Hono, db: PrismaClient) {
   app.put('/api/notices', async (c) => {
     const body = await c.req.json();
-    const current = await db.notice.findUniqueOrThrow({ where: { id: 'local' } });
+    const where = { memberId: currentMemberId() };
+    const current = await db.notice.findUniqueOrThrow({ where });
     await db.notice.update({
-      where: { id: 'local' },
+      where,
       data: {
         outfit: typeof body.outfit === 'boolean' ? body.outfit : current.outfit,
         budget: typeof body.budget === 'boolean' ? body.budget : current.budget,

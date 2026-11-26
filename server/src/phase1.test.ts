@@ -20,7 +20,7 @@ execSync('npx prisma db push --skip-generate', {
 
 const db = new PrismaClient();
 await seedIfEmpty(db);
-const server = serve({ fetch: createApp(db).fetch, port: 0, hostname: '127.0.0.1' });
+const server = serve({ fetch: createApp(db, { demo: true }).fetch, port: 0, hostname: '127.0.0.1' });
 await new Promise<void>((resolve) => {
   if (server.listening) resolve();
   else server.once('listening', () => resolve());

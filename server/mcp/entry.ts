@@ -21,18 +21,19 @@ async function main() {
   const filename = process.env.AI_LIFE_MCP_DB;
   if (!filename || !isAbsolute(filename)) throw new Error('Database path required');
   const db = openReadOnly(filename);
+  const memberId = process.env.AI_LIFE_MCP_MEMBER_ID?.trim() || 'local';
   const server = new McpServer({ name: 'ai-life-readonly', version: '1.0.0' });
   server.registerTool('outfit_suggestion', {
     description: '按当前衣橱及已保存的天气生成一套穿搭建议。', inputSchema: z.strictObject({}), annotations,
-  }, () => result(() => outfit(db)));
+  }, () => result(() => outfit(db, memberId)));
   server.registerTool('packing_list', {
     description: '读取指定行程的打包项目及勾选状态；省略 tripId 时读取当前行程。',
     inputSchema: z.strictObject({ tripId: z.string().trim().min(1).max(200).optional() }), annotations,
-  }, ({ tripId }) => result(() => packing(db, tripId)));
+  }, ({ tripId }) => result(() => packing(db, tripId, memberId)));
   server.registerTool('budget_summary', {
     description: '按月汇总消费、预算、余额及六个月走势，单位为人民币元。',
     inputSchema: z.strictObject({ month: z.string().refine(isMonth, '请使用 YYYY-MM').optional() }), annotations,
-  }, ({ month }) => result(() => budget(db, month)));
+  }, ({ month }) => result(() => budget(db, month, memberId)));
   server.server.onclose = () => db.close();
   await server.connect(new StdioServerTransport());
 }

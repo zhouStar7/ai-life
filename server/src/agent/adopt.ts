@@ -1,108 +1,109 @@
+import { createHash } from 'node:crypto';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { yuanToCents } from '../money.js';
-import type { PrismaClient } from '@prisma/client';
 import { readJson, uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
 import { localDate } from '../localDate.js';
 import { pickRecipe } from '../dietPlan.js';
 import { planOutfit } from '../wardrobePlan.js';
-import { crossActions, type Action } from './actions.js';
+import { currentMemberId } from '../requestContext.js';
+import type { Action } from './actions.js';
 
-function withTip(tips: string[], id: string) {
-  return tips.includes(id) ? tips : [...tips, id];
-}
+type ActionResult = { type: Action['type']; status: 'done' | 'skipped'; error?: string };
 
-export async function adopt(db: PrismaClient, key: string | undefined, actions: Action[]) {
-  const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-  let tips = readJson<string[]>(session.adoptedTips, []);
-  const batch = actions.length > 0 ? actions : key === 'cross' ? crossActions() : await preset(db, key, session);
-  if (key && tips.includes(key)) return readSnapshot(db);
-  if (key === 'outfit' && session.outfitAdopted) return readSnapshot(db);
-
-  let outfitAdopted = session.outfitAdopted;
-  let activeTripId = session.activeTripId;
-  let suggestionIndex = session.suggestionIndex;
-  let weatherOn = session.weatherOn;
-
-  for (const action of batch) {
-    if (action.type === 'adopt_outfit') {
-      const ids = action.itemIds;
-      await db.wardrobeItem.updateMany({ where: { id: { in: ids } }, data: { wears: { increment: 1 } } });
-      outfitAdopted = true;
-      tips = withTip(tips, 'outfit');
-    } else if (action.type === 'add_meal') {
-      const id = action.id ?? uid('m');
-      const date = localDate();
-      const exists = await db.meal.findFirst({ where: { OR: [{ id }, { name: action.name, date }] } });
-      if (!exists) {
-        await db.meal.create({
-          data: {
-            id,
-            slot: action.slot,
-            name: action.name,
-            time: action.time,
-            date,
-            kcal: action.kcal,
-            protein: action.protein,
-            carb: action.carb,
-            fat: action.fat,
-          },
-        });
+export async function adopt(db: PrismaClient, key: string | undefined, actions: Action[] | undefined, demo: boolean) {
+  const memberId = currentMemberId();
+  const results = await db.$transaction(async (tx) => {
+    const state = await tx.memberState.findUniqueOrThrow({ where: { memberId } });
+    const tips = new Set(readJson<string[]>(state.adoptedTips, []));
+    const batch = actions ?? await preset(tx, key, state.suggestionIndex);
+    let { outfitAdopted, activeTripId } = state;
+    const results: ActionResult[] = [];
+    for (const action of batch) {
+      if (action.type === 'apply_scene') {
+        results.push({ type: action.type, status: 'skipped', error: 'confirmation_required' });
+        continue;
       }
-      if (key === 'protein' || key === 'cross' || action.name.includes('鸡胸')) tips = withTip(tips, 'protein');
-    } else if (action.type === 'append_packing') {
-      const trip = await db.trip.findUnique({ where: { id: action.tripId } });
-      if (!trip) continue;
-      const packing = readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []);
-      const owned = new Set(packing.map((item) => item.text));
-      for (const text of action.items) {
-        if (!owned.has(text)) packing.push({ id: uid('p'), text, done: false });
+      const fingerprint = createHash('sha256').update(`${memberId}\n${key ?? ''}\n${JSON.stringify(action)}`).digest('hex');
+      if (await tx.actionRun.findUnique({ where: { fingerprint } }) || (!actions && key && tips.has(key))) {
+        results.push({ type: action.type, status: 'skipped' });
+        continue;
       }
-      await db.trip.update({ where: { id: trip.id }, data: { packing: JSON.stringify(packing), prepAdopted: true } });
-      activeTripId = trip.id;
-      tips = withTip(tips, 'prep');
-    } else if (action.type === 'add_expense') {
-      const amountCents = yuanToCents(action.amount);
-      if (!amountCents) throw new Error('Invalid expense amount');
-      const id = action.id ?? uid('e');
-      const exists = await db.expense.findUnique({ where: { id } });
-      if (!exists) {
-        await db.expense.create({
-          data: { id, tag: action.tag, amountCents, date: action.date, merchant: action.merchant, note: action.note },
-        });
-      }
-    } else if (action.type === 'handle_alert') {
-      await db.alert.updateMany({ where: { id: action.id }, data: { handled: true } });
-      if (action.id === 'a-filter') tips = withTip(tips, 'filter');
+      const applied = await applyAction(tx, action, demo ? null : memberId);
+      if (applied && action.type === 'adopt_outfit') { outfitAdopted = true; tips.add('outfit'); }
+      if (applied && action.type === 'add_meal' && (key === 'protein' || action.name.includes('鸡胸'))) tips.add('protein');
+      if (applied && action.type === 'append_packing') { activeTripId = action.tripId; tips.add('prep'); }
+      if (applied && action.type === 'handle_alert' && action.id === 'a-filter') tips.add('filter');
+      const status = applied ? 'done' : 'skipped';
+      await tx.actionRun.create({ data: { id: uid('run'), fingerprint, type: action.type, status: 'done', detail: status } });
+      results.push({ type: action.type, status });
     }
-  }
-
-  if (key === 'cross') {
-    suggestionIndex = 1;
-    weatherOn = true;
-    outfitAdopted = true;
-    tips = withTip(withTip(withTip(withTip(tips, 'outfit'), 'protein'), 'prep'), 'filter');
-    tips = withTip(tips, 'cross');
-  } else if (key) {
-    tips = withTip(tips, key);
-  }
-
-  await db.sessionState.update({
-    where: { id: 'local' },
-    data: { adoptedTips: JSON.stringify(tips), outfitAdopted, activeTripId, suggestionIndex, weatherOn },
+    if (results.some((item) => item.status === 'done')) {
+      if (key) tips.add(key);
+      await tx.memberState.update({ where: { memberId }, data: { adoptedTips: JSON.stringify([...tips]), outfitAdopted, activeTripId } });
+    }
+    return results;
   });
-  return readSnapshot(db);
+  return { snapshot: await readSnapshot(db), results };
 }
 
-async function preset(db: PrismaClient, key: string | undefined, session: { suggestionIndex: number; weatherOn: boolean; weatherLabel: string }): Promise<Action[]> {
+function actionId(prefix: string, id: string | undefined, memberId: string | null) {
+  if (!id) return uid(prefix);
+  if (!memberId) return id;
+  return `${prefix}-${createHash('sha256').update(JSON.stringify([memberId, id])).digest('hex')}`;
+}
+
+async function applyAction(tx: Prisma.TransactionClient, action: Exclude<Action, { type: 'apply_scene' }>, memberId: string | null) {
+  if (action.type === 'adopt_outfit') {
+    const ids = [...new Set(action.itemIds)];
+    const items = await tx.wardrobeItem.count({ where: { id: { in: ids } } });
+    if (!ids.length || items !== ids.length) return false;
+    await tx.wardrobeItem.updateMany({ where: { id: { in: ids } }, data: { wears: { increment: 1 } } });
+    return true;
+  }
+  if (action.type === 'add_meal') {
+    const { type: _, id: suppliedId, ...meal } = action;
+    const id = actionId('m', suppliedId, memberId);
+    const date = localDate();
+    if (await tx.meal.findFirst({ where: { OR: [{ id }, { name: meal.name, date }] } })) return false;
+    await tx.meal.create({ data: { ...meal, id, date } });
+    return true;
+  }
+  if (action.type === 'append_packing') {
+    const trip = await tx.trip.findUnique({ where: { id: action.tripId } });
+    if (!trip) return false;
+    const packing = readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []);
+    const owned = new Set(packing.map((item) => item.text));
+    for (const text of new Set(action.items)) {
+      if (!owned.has(text)) packing.push({ id: uid('p'), text, done: false });
+    }
+    await tx.trip.update({ where: { id: trip.id }, data: { packing: JSON.stringify(packing), prepAdopted: true } });
+    return true;
+  }
+  if (action.type === 'add_expense') {
+    const amountCents = yuanToCents(action.amount);
+    const id = actionId('e', action.id, memberId);
+    if (!amountCents || await tx.expense.findUnique({ where: { id } })) return false;
+    await tx.expense.create({ data: { id, tag: action.tag, amountCents, date: action.date, merchant: action.merchant, note: action.note } });
+    return true;
+  }
+  const updated = await tx.alert.updateMany({ where: { id: action.id, handled: false }, data: { handled: true } });
+  return updated.count > 0;
+}
+
+async function preset(db: Prisma.TransactionClient, key: string | undefined, suggestionIndex: number): Promise<Action[]> {
   if (key === 'outfit') {
-    const items = await db.wardrobeItem.findMany();
-    return [{ type: 'adopt_outfit', itemIds: planOutfit(items, session.suggestionIndex, session.weatherOn, session.weatherLabel).itemIds }];
+    const [items, session] = await Promise.all([
+      db.wardrobeItem.findMany(),
+      db.sessionState.findUniqueOrThrow({ where: { id: 'local' } }),
+    ]);
+    return [{ type: 'adopt_outfit', itemIds: planOutfit(items, suggestionIndex, session.weatherOn, session.weatherLabel).itemIds }];
   }
   if (key === 'protein') {
     const [recipes, meals, target] = await Promise.all([
       db.recipe.findMany(),
       db.meal.findMany({ where: { date: localDate() } }),
-      db.nutritionTarget.findUniqueOrThrow({ where: { id: 'local' } }),
+      db.nutritionTarget.findUniqueOrThrow({ where: { memberId: currentMemberId() } }),
     ]);
     const picked = pickRecipe(recipes, meals, target);
     if (!picked) return [];

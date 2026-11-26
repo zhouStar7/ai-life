@@ -17,16 +17,19 @@ test('external SDK host discovers and calls exactly the three read-only tools', 
   const filename = path.join(directory, 'fixture.sqlite');
   const db = new DatabaseSync(filename);
   db.exec(`
-    CREATE TABLE SessionState(id, suggestionIndex, weatherOn, weatherLabel, activeTripId);
-    INSERT INTO SessionState VALUES ('local', 0, 1, '10°C 雨', 'trip');
-    CREATE TABLE WardrobeItem(id, name, category, season, color, occasion, wears);
-    INSERT INTO WardrobeItem VALUES ('shirt','衬衫','上衣','四季','白','通勤',1), ('pants','长裤','裤装','四季','黑','通勤',3), ('shoes','靴','鞋包','秋冬','黑','通勤',2), ('coat','风衣','外套','秋冬','蓝','通勤',0);
-    CREATE TABLE Trip(id, title, packing, tickets);
-    INSERT INTO Trip VALUES ('trip','杭州出差','[{"id":"p1","text":"充电器","done":true,"private":"hidden-sentinel"}]','hidden-sentinel');
-    CREATE TABLE Budget(id, totalCents, clothCents, foodCents, homeCents, tripCents);
-    INSERT INTO Budget VALUES ('local', 100000, 10000, 20000, 30000, 40000);
-    CREATE TABLE Expense(date, tag, amountCents, merchant);
-    INSERT INTO Expense VALUES ('2026-09-02','食',1234,'hidden-sentinel'), ('2026-08-01','行',500,'hidden-sentinel');
+    CREATE TABLE SessionState(id, weatherOn, weatherLabel);
+    INSERT INTO SessionState VALUES ('local', 1, '10°C 雨');
+    CREATE TABLE MemberState(memberId, suggestionIndex, activeTripId);
+    INSERT INTO MemberState VALUES ('local', 0, 'trip'), ('other', 0, 'other-trip');
+    CREATE TABLE WardrobeItem(id, memberId DEFAULT 'local', name, category, season, color, occasion, wears);
+    INSERT INTO WardrobeItem (id,name,category,season,color,occasion,wears) VALUES ('shirt','衬衫','上衣','四季','白','通勤',1), ('pants','长裤','裤装','四季','黑','通勤',3), ('shoes','靴','鞋包','秋冬','黑','通勤',2), ('coat','风衣','外套','秋冬','蓝','通勤',0);
+    INSERT INTO WardrobeItem VALUES ('other-shirt','other','hidden-sentinel','上衣','四季','白','通勤',0);
+    CREATE TABLE Trip(id, memberId, title, packing, tickets);
+    INSERT INTO Trip VALUES ('trip','local','杭州出差','[{"id":"p1","text":"充电器","done":true,"private":"hidden-sentinel"}]','hidden-sentinel'), ('other-trip','other','hidden-sentinel','[]','');
+    CREATE TABLE Budget(memberId, totalCents, clothCents, foodCents, homeCents, tripCents);
+    INSERT INTO Budget VALUES ('local', 100000, 10000, 20000, 30000, 40000), ('other', 5000, 1000, 1000, 1000, 2000);
+    CREATE TABLE Expense(memberId, date, tag, amountCents, merchant);
+    INSERT INTO Expense VALUES ('local','2026-09-02','食',1234,'hidden-sentinel'), ('local','2026-08-01','行',500,'hidden-sentinel'), ('other','2026-09-02','食',5000,'hidden-sentinel');
     CREATE TABLE Profile(modelKey, haToken);
     INSERT INTO Profile VALUES ('hidden-sentinel', 'hidden-sentinel');
   `);
@@ -62,7 +65,7 @@ test('external SDK host discovers and calls exactly the three read-only tools', 
     assert.equal(summary.byTag.食, 12.34);
     assert.equal(summary.remaining, 987.66);
     assert.equal((await call('budget_summary', { month: '2026-08' })).monthTotal, 5);
-    for (const [name, args] of [['packing_list', { tripId: 'unknown' }], ['budget_summary', { month: '2026-13' }], ['outfit_suggestion', { adopt: true }], ['update_budget', {}]] as const) {
+    for (const [name, args] of [['packing_list', { tripId: 'unknown' }], ['packing_list', { tripId: 'other-trip' }], ['budget_summary', { month: '2026-13' }], ['outfit_suggestion', { adopt: true }], ['update_budget', {}]] as const) {
       const response = await host.callTool({ name, arguments: args });
       assert.equal(response.isError, true);
     }

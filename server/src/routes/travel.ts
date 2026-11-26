@@ -1,4 +1,5 @@
 import { isMonth } from '../../../shared/spending.js';
+import { inferTripDates, tripDateLabel, tripStatus } from '../../../shared/trips.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { complete } from '../adapters/model.js';
@@ -9,6 +10,8 @@ import { localDate } from '../localDate.js';
 import { centsToYuan, yuanToCents } from '../money.js';
 import { createHash } from 'node:crypto';
 import { destinationOf, mealReason, pickTravelOutfit, suggestTripMeal } from '../tripPlan.js';
+import { parseTripDates } from '../tripDates.js';
+import { currentMemberId, LOCAL_MEMBER_ID } from '../requestContext.js';
 
 function packingItems(lines: string[]) {
   return lines.map((text) => ({ id: uid('p'), text, done: false }));
@@ -18,10 +21,15 @@ function importId(key: string) {
   return `trip-${createHash('sha256').update(key).digest('hex')}`;
 }
 
+function scopedImportId(key: string) {
+  const memberId = currentMemberId();
+  return memberId === LOCAL_MEMBER_ID ? key : importId(JSON.stringify([memberId, key]));
+}
+
 async function previewTrip(db: PrismaClient, draft: ItineraryDraft, text: string, source: 'rules' | 'model') {
-  const id = importId(text.normalize('NFKC').replace(/\s+/g, ' ').trim());
-  const existingTrip = await db.trip.findUnique({ where: { id }, select: { id: true, title: true } });
-  return { draft: { ...draft, source, importId: id, existingTrip } };
+  const key = importId(text.normalize('NFKC').replace(/\s+/g, ' ').trim());
+  const existingTrip = await db.trip.findUnique({ where: { id: scopedImportId(key) }, select: { id: true, title: true } });
+  return { draft: { ...draft, status: tripStatus(draft, localDate()), source, importId: key, existingTrip } };
 }
 
 export function registerTravel(app: Hono, db: PrismaClient) {
@@ -55,15 +63,23 @@ export function registerTravel(app: Hono, db: PrismaClient) {
       || !draft.timeline.every(node => node && [node.time, node.title, node.detail].every(value => typeof value === 'string' && value.trim()))
       || !Array.isArray(draft.tickets) || !draft.tickets.every(ticket => ticket && typeof ticket.label === 'string' && typeof ticket.status === 'string')
       || !Array.isArray(draft.packing) || !draft.packing.every(text => typeof text === 'string')) return c.json({ error: 'invalid' }, 400);
-    const id = typeof body.draft.importId === 'string' && /^trip-[a-f0-9]{64}$/.test(body.draft.importId)
+    const today = localDate();
+    const dateLabel = typeof draft.dateLabel === 'string' ? draft.dateLabel.trim() : '';
+    const provided = parseTripDates(draft.startDate, draft.endDate);
+    if (!provided) return c.json({ error: 'invalid_date' }, 400);
+    const dates = provided.startDate ? provided : inferTripDates(dateLabel, draft.timeline.map(node => node.time), today);
+    const key = typeof body.draft.importId === 'string' && /^trip-[a-f0-9]{64}$/.test(body.draft.importId)
       ? body.draft.importId : importId(JSON.stringify([draft.dateLabel, draft.tickets, draft.timeline]));
+    const id = scopedImportId(key);
+    const memberId = currentMemberId();
     const duplicate = await db.$transaction(async tx => {
       const exists = await tx.trip.findUnique({ where: { id }, select: { id: true } });
       if (!exists) await tx.trip.create({ data: {
-        id, title: draft.title.trim(), status: '即将开始', transport: draft.transport || '其他', dateLabel: draft.dateLabel || '日期待定',
+        id, title: draft.title.trim(), status: tripStatus(dates, today), transport: draft.transport || '其他',
+        dateLabel: dateLabel || tripDateLabel(dates), ...dates,
         tickets: JSON.stringify(draft.tickets), timeline: JSON.stringify(draft.timeline), packing: JSON.stringify(packingItems(draft.packing.map(text => text.trim()).filter(Boolean))),
       } });
-      await tx.sessionState.update({ where: { id: 'local' }, data: { activeTripId: id } });
+      await tx.memberState.update({ where: { memberId }, data: { activeTripId: id } });
       return Boolean(exists);
     });
     return c.json({ snapshot: await readSnapshot(db), duplicate });
@@ -152,38 +168,54 @@ export function registerTravel(app: Hono, db: PrismaClient) {
 
   app.post('/api/trips', async (c) => {
     const body = await c.req.json();
-    if (!body.title) return c.json({ error: 'invalid' }, 400);
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    if (!title) return c.json({ error: 'invalid' }, 400);
+    const today = localDate();
+    const dateLabel = typeof body.dateLabel === 'string' ? body.dateLabel.trim() : '';
+    const provided = parseTripDates(body.startDate, body.endDate);
+    if (!provided) return c.json({ error: 'invalid_date' }, 400);
+    const dates = provided.startDate ? provided : inferTripDates(dateLabel, [], today);
     const id = uid('trip');
-    await db.trip.create({
-      data: {
+    const memberId = currentMemberId();
+    await db.$transaction(async tx => {
+      await tx.trip.create({ data: {
         id,
-        title: String(body.title).trim(),
-        status: body.status === '进行中' ? '进行中' : '即将开始',
+        title,
+        status: tripStatus(dates, today),
         transport: body.transport || '高铁',
-        dateLabel: body.dateLabel || '日期待定',
+        dateLabel: dateLabel || tripDateLabel(dates),
+        ...dates,
         tickets: '[]',
-        timeline: JSON.stringify([{ time: '待定', title: '出发', detail: '时间补上之后会出现在这里' }]),
-        packing: JSON.stringify(['身份证', '充电器', '换洗衣物'].map((text) => ({ id: uid('p'), text, done: false }))),
+        timeline: JSON.stringify([{ time: dates.startDate || '待定', title: '出发', detail: dates.startDate ? '时间待确认' : '时间补上之后会出现在这里' }]),
+        packing: JSON.stringify(packingItems(['身份证', '充电器', '换洗衣物'])),
         prepAdopted: false,
-      },
+      } });
+      await tx.memberState.update({ where: { memberId }, data: { activeTripId: id } });
     });
-    await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: id } });
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
   app.delete('/api/trips/:id', async (c) => {
     const id = c.req.param('id');
-    await db.trip.delete({ where: { id } });
-    const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    if (session.activeTripId === id) {
-      const remaining = await db.trip.findFirst();
-      await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: remaining?.id ?? '' } });
-    }
+    const memberId = currentMemberId();
+    const removed = await db.$transaction(async tx => {
+      const { count } = await tx.trip.deleteMany({ where: { id } });
+      if (!count) return false;
+      const state = await tx.memberState.findUniqueOrThrow({ where: { memberId } });
+      if (state.activeTripId === id) {
+        const remaining = await tx.trip.findFirst();
+        await tx.memberState.update({ where: { memberId }, data: { activeTripId: remaining?.id ?? '' } });
+      }
+      return true;
+    });
+    if (!removed) return c.json({ error: 'missing' }, 404);
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
   app.post('/api/trips/:id/select', async (c) => {
-    await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: c.req.param('id') } });
+    const trip = await db.trip.findUnique({ where: { id: c.req.param('id') }, select: { id: true } });
+    if (!trip) return c.json({ error: 'missing' }, 404);
+    await db.memberState.update({ where: { memberId: currentMemberId() }, data: { activeTripId: trip.id } });
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
@@ -290,10 +322,11 @@ export function registerTravel(app: Hono, db: PrismaClient) {
       const claimed = await tx.trip.updateMany({ where: { id: trip.id, prepAdopted: false }, data: { prepAdopted: true } });
       if (!claimed.count) return;
       await tx.wardrobeItem.updateMany({ where: { id: { in: outfit.itemIds } }, data: { wears: { increment: 1 } } });
-      const current = await tx.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
+      const memberId = currentMemberId();
+      const current = await tx.memberState.findUniqueOrThrow({ where: { memberId } });
       const tips = new Set(readJson<string[]>(current.adoptedTips, []));
       tips.add('prep');
-      await tx.sessionState.update({ where: { id: 'local' }, data: { adoptedTips: JSON.stringify([...tips]), outfitAdopted: outfit.itemIds.length > 0 || current.outfitAdopted } });
+      await tx.memberState.update({ where: { memberId }, data: { adoptedTips: JSON.stringify([...tips]), outfitAdopted: outfit.itemIds.length > 0 || current.outfitAdopted } });
     });
     return c.json({ snapshot: await readSnapshot(db) });
   });

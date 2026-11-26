@@ -13,6 +13,6 @@ export function centsToYuan(cents: bigint): number {
   return Number(cents) / 100;
 }
 
-export function expenseToYuan<T extends { amountCents: bigint }>({ amountCents, ...row }: T) {
+export function expenseToYuan<T extends { amountCents: bigint; memberId?: string; fingerprint?: string | null }>({ amountCents, memberId: _memberId, fingerprint: _fingerprint, ...row }: T) {
   return { ...row, amount: centsToYuan(amountCents) };
 }

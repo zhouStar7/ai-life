@@ -2,21 +2,24 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { testPorts } from '../../scripts/testPorts.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 
-const origin = 'http://127.0.0.1:1117';
 test('personal workspace daily use in Chrome', async (t) => {
+  const { webPort, apiPort } = await testPorts();
+  const origin = `http://127.0.0.1:${webPort}`;
   const dir = await mkdtemp(join(tmpdir(), 'ai-life-browser-'));
   const shortcutToken = randomBytes(32).toString('base64url');
   const child = spawn('npm', ['run', 'dev'], {
     cwd: new URL('../../', import.meta.url), detached: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env, DATABASE_URL: `file:${join(dir, 'browser.sqlite')}`,
+      AI_LIFE_WEB_PORT: String(webPort), AI_LIFE_API_PORT: String(apiPort),
       AI_LIFE_SHORTCUT_TOKEN: shortcutToken, TZ: 'Asia/Shanghai',
     },
   });
@@ -27,6 +30,7 @@ test('personal workspace daily use in Chrome', async (t) => {
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, 'SIGTERM');
     await stopped;
+    await rm(dir, { recursive: true, force: true });
   });
   const deadline = Date.now() + 60000;
   // Wait for this launcher before contacting a port another instance may already own.
@@ -39,7 +43,14 @@ test('personal workspace daily use in Chrome', async (t) => {
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Shanghai' });
   page.setDefaultTimeout(8000);
-  const snapshot = async () => (await fetch(`${origin}/api/snapshot`)).json();
+  assert.equal((await fetch(`${origin}/api/snapshot`)).status, 401);
+  await page.goto(origin);
+  await page.getByLabel('显示名').fill('回归测试');
+  await page.getByLabel('用户名').fill('browser-owner');
+  await page.getByLabel('密码', { exact: true }).fill('test-password');
+  await page.getByRole('button', { name: '注册并进入' }).click();
+  await page.getByRole('heading', { name: '今日概览' }).waitFor();
+  const snapshot = async () => (await page.request.get(`${origin}/api/snapshot`)).json();
   await t.test('a failed meal write preserves input and a retry persists once', async () => {
     await page.goto(`${origin}/diet`);
     await page.getByTestId('add-meal').click();

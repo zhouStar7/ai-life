@@ -68,9 +68,15 @@ export function draftsFromOrder(text: string): ClothingDraft[] {
 }
 
 function draftFromLine(line: string): ClothingDraft | null {
+  const pricePattern = /[¥￥]\s*([+-]?\d[\d,]*(?:\.\d+)?)/g;
+  const prices = [...line.matchAll(pricePattern)];
+  const amount = prices.length === 1 ? prices[0][1] : '';
+  const normalized = amount.replaceAll(',', '');
+  const price = /^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(amount)
+    && /^\d{1,14}(\.\d{1,2})?$/.test(normalized) && Number(normalized) < 2 ** 46 ? Number(normalized) : undefined;
   const cleaned = line
     .replace(/^(商品名称|商品|名称)\s*[:：]\s*/, '')
-    .replace(/[¥￥]\s*\d+(?:\.\d+)?/g, '')
+    .replace(pricePattern, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!cleaned || /^(订单|合计|实付|运费|店铺|快递)/.test(cleaned)) return null;
@@ -78,6 +84,7 @@ function draftFromLine(line: string): ClothingDraft | null {
   if (!category) return null;
   return {
     name: cleaned.slice(0, 40),
+    ...(price === undefined ? {} : { price }),
     category,
     color: COLORS.find((color) => cleaned.includes(color)) ?? '',
     occasion: STYLES.find((style) => cleaned.includes(style)) ?? '通勤',

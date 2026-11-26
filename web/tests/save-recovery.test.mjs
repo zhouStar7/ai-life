@@ -20,7 +20,13 @@ test('personal writes retain fields, reconcile before retry, survive reload, and
   let phase = 'write';
   const writes = [];
   const requests = [];
+  const keys = [];
+  const cacheSession = 'a'.repeat(64);
   const server = createServer(async (req, res) => {
+    if (req.url === '/api/auth/session') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': `ailife-context=${cacheSession}; Path=/` });
+      return res.end(JSON.stringify({ demo: false, member: { id: 'local', username: 'tester', name: '测试', isOwner: true }, needsSetup: false, cacheSession }));
+    }
     if (req.url === '/api/snapshot') {
       requests.push('read');
       res.writeHead(phase === 'cached' ? 503 : 200, { 'Content-Type': 'application/json' });
@@ -30,6 +36,7 @@ test('personal writes retain fields, reconcile before retry, survive reload, and
       const body = [];
       for await (const bytes of req) body.push(bytes);
       writes.push(JSON.parse(Buffer.concat(body)));
+      keys.push(req.headers['idempotency-key']);
       requests.push('write');
       if (writes.length === 2) {
         // Send response headers first so Chrome observes a lost response body.
@@ -85,5 +92,8 @@ test('personal writes retain fields, reconcile before retry, survive reload, and
   await page.getByText('便携水杯', { exact: true }).waitFor();
   assert.equal(await page.getByText('断线测试夹克').count(), 0);
   assert.deepEqual(writes[0], writes[2]);
+  assert.match(keys[0], /^[a-f0-9]{32}$/);
+  assert.notEqual(keys[0], keys[1]);
+  assert.equal(keys[1], keys[2]);
   assert.deepEqual(requests.slice(requests.indexOf('write')), ['write', 'write', 'read', 'write', 'read', 'read']);
 });

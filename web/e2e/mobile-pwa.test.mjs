@@ -10,6 +10,11 @@ import { build, preview } from 'vite';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const trip = { id: 't', title: '回归行程', status: '即将开始', transport: '高铁', dateLabel: '周末', timeline: [], tickets: [{ label: '私密票号' }], packing: [{ id: 'p', text: '充电器', done: true }] };
 const snapshot = { trips: [trip], activeTripId: 't', items: [], outfits: [], meals: [], recipes: [], devices: [], alerts: [], expenses: [], adoptedTips: [], budgets: { total: 0, 衣: 0, 食: 0, 住: 0, 行: 0 }, targets: { kcal: 2000, protein: 80 }, model: { model: '', baseUrl: '', configured: false }, notices: {} };
+const accounts = {
+  owner: { id: 'local', username: 'owner', name: '测试账号', isOwner: true },
+  second: { id: 'second', username: 'second', name: '第二账号', isOwner: false },
+};
+const hints = { owner: 'a'.repeat(64), second: 'b'.repeat(64) };
 
 test('production PWA serves a read-only packing list on a disconnected phone viewport', async t => {
   const outDir = await mkdtemp(join(tmpdir(), 'ai-life-pwa-'));
@@ -19,9 +24,26 @@ test('production PWA serves a read-only packing list on a disconnected phone vie
       server.middlewares.use('/api', (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store');
-        const responses = { '/snapshot': snapshot, '/meals/shortcut-drafts': { drafts: [] }, '/weather/cities': { cities: [] } };
-        const body = responses[req.url] ?? {};
-        res.end(JSON.stringify(body));
+        const active = req.headers.cookie?.match(/(?:^|;\s*)test-account=(owner|second)(?:;|$)/)?.[1];
+        const sendSession = (account) => {
+          res.setHeader('Set-Cookie', [`test-account=${account}; Path=/; HttpOnly`, `ailife-context=${hints[account]}; Path=/`]);
+          res.end(JSON.stringify({ demo: false, member: accounts[account], needsSetup: false, cacheSession: hints[account] }));
+        };
+        if (req.url === '/auth/login') return sendSession('second');
+        if (req.url === '/auth/logout') {
+          res.setHeader('Set-Cookie', ['test-account=; Path=/; Max-Age=0', 'ailife-context=; Path=/; Max-Age=0']);
+          return res.end(JSON.stringify({ ok: true }));
+        }
+        if (!active) {
+          res.statusCode = 401;
+          return res.end(JSON.stringify({ error: 'unauthorized' }));
+        }
+        if (req.url === '/auth/session') return sendSession(active);
+        const activeSnapshot = active === 'owner' ? snapshot : {
+          ...snapshot, trips: [{ ...trip, title: '另一份行程', packing: [{ id: 'p', text: '护照', done: false }] }],
+        };
+        const responses = { '/snapshot': activeSnapshot, '/meals/shortcut-drafts': { drafts: [] }, '/weather/cities': { cities: [] } };
+        res.end(JSON.stringify(responses[req.url] ?? {}));
       });
     },
   }] });
@@ -30,6 +52,7 @@ test('production PWA serves a read-only packing list on a disconnected phone vie
   const browser = await chromium.launch({ channel: 'chrome' });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true });
+  await context.addCookies([{ name: 'test-account', value: 'owner', url: origin, httpOnly: true }]);
   const page = await context.newPage();
   page.setDefaultTimeout(8000);
   const errors = [];
@@ -77,5 +100,26 @@ test('production PWA serves a read-only packing list on a disconnected phone vie
   await context.setOffline(false);
   await page.getByRole('button', { name: '重新连接' }).click();
   await page.getByRole('heading', { name: '行李清单' }).waitFor();
+  await page.goto(`${origin}/settings`);
+  await page.locator('.packing-cache time').waitFor();
+  await context.setOffline(true);
+  await page.goto(`${origin}/travel`);
+  await page.getByText('充电器', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '退出登录' }).click();
+  await page.getByRole('heading', { name: '登录' }).waitFor();
+  await page.reload();
+  await page.getByRole('heading', { name: '登录' }).waitFor();
+  assert.equal(await page.getByText('充电器', { exact: true }).count(), 0);
+  await context.setOffline(false);
+  await page.getByLabel('用户名').fill('second');
+  await page.getByLabel('密码', { exact: true }).fill('test-password');
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByText('护照', { exact: true }).waitFor();
+  await page.goto(`${origin}/settings`);
+  await page.locator('.packing-cache time').waitFor();
+  await context.setOffline(true);
+  await page.goto(`${origin}/travel`);
+  await page.getByText('护照', { exact: true }).waitFor();
+  assert.equal(await page.getByText('充电器', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
 });

@@ -8,8 +8,11 @@ if (!['personal', 'demo'].includes(mode)) throw new Error('请选择 personal �
 const root = fileURLToPath(new URL('../', import.meta.url));
 const host = '127.0.0.1';
 // Different origins also isolate browser storage for personal and demo sessions.
-const webPort = mode === 'personal' ? 1117 : 1118;
-const apiPort = mode === 'personal' ? 8787 : 8788;
+const webPort = Number(process.env.AI_LIFE_WEB_PORT ?? (mode === 'personal' ? 1117 : 1118));
+const apiPort = Number(process.env.AI_LIFE_API_PORT ?? (mode === 'personal' ? 8787 : 8788));
+if ([webPort, apiPort].some((port) => !Number.isInteger(port) || port < 1 || port > 65535) || webPort === apiPort) {
+  throw new Error('页面端口与 API 端口必须是不同的有效 TCP 端口');
+}
 const api = `http://${host}:${apiPort}`;
 const children = new Set();
 let stopping = false;
@@ -63,8 +66,8 @@ try {
   const deadline = Date.now() + 60_000;
   while (!stopping) {
     try {
-      const response = await fetch(`${api}/api/snapshot`, { signal: AbortSignal.timeout(1500) });
-      if (response.ok && Array.isArray((await response.json()).items)) break;
+      const response = await fetch(`${api}/api/health`, { signal: AbortSignal.timeout(1500) });
+      if (response.ok) break;
     } catch { /* Prisma and the API are still starting. */ }
     if (Date.now() >= deadline) throw new Error('本机 API 在 60 秒内未就绪，请检查上方后端日志');
     await delay(250);

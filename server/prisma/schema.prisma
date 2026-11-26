@@ -17,70 +17,128 @@ model Profile {
   haToken   String @default("")
 }
 
-model SessionState {
-  id              String  @id
+model Member {
+  id           String @id
+  username     String @unique
+  name         String
+  passwordHash String
+  createdAt    String
+}
+
+model AuthSession {
+  token     String @id
+  memberId  String
+  expiresAt String
+}
+
+model MutationReceipt {
+  memberId  String
+  key       String
+  signature String
+  status    Int
+  response  String
+  createdAt DateTime @default(now())
+
+  @@id([memberId, key])
+}
+
+model ActionRun {
+  id          String @id
+  fingerprint String @unique
+  type        String
+  status      String
+  detail      String @default("")
+}
+
+model MemberState {
+  memberId        String  @id
   suggestionIndex Int     @default(0)
-  weatherOn       Boolean @default(true)
-  weatherLabel    String  @default("22°C 多云")
-  weatherCity     String  @default("")
-  weatherSource   String  @default("")
-  weatherUpdatedAt String @default("")
   outfitAdopted   Boolean @default(false)
   activeOutfitId  String?
-  activeScene     String?
-  activeTripId    String  @default("t-bj")
+  activeTripId    String  @default("")
   adoptedTips     String  @default("[]")
-  haConnected     Boolean @default(false)
-  haScenes        String  @default("{}")
+}
+
+model SessionState {
+  id               String  @id
+  weatherOn        Boolean @default(true)
+  weatherLabel     String  @default("22°C 多云")
+  weatherCity      String  @default("")
+  weatherSource    String  @default("")
+  weatherUpdatedAt String  @default("")
+  activeScene      String?
+  haConnected      Boolean @default(false)
+  haScenes         String  @default("{}")
 }
 
 model WardrobeItem {
-  id        String @id
-  name      String
-  category  String
-  season    String
-  color     String
-  occasion  String
-  wears     Int
-  createdAt String
+  id         String  @id
+  memberId   String  @default("local")
+  name       String
+  category   String
+  season     String
+  color      String
+  occasion   String
+  wears      Int
+  createdAt  String
+  cover      String  @default("")
+  priceCents BigInt?
+
+  @@index([memberId, createdAt])
+}
+
+model WardrobePhoto {
+  id       String @id
+  memberId String @default("local")
+  data     String
 }
 
 model Outfit {
   id       String  @id
+  memberId String  @default("local")
   name     String
   itemIds  String
   favorite Boolean
+
+  @@index([memberId])
 }
 
 model Meal {
-  id      String @id
-  slot    String
-  name    String
-  time    String
-  date    String
-  kcal    Int
-  protein Int
-  carb    Int
-  fat     Int
+  id       String @id
+  memberId String @default("local")
+  slot     String
+  name     String
+  time     String
+  date     String
+  kcal     Int
+  protein  Int
+  carb     Int
+  fat      Int
+
+  @@index([memberId])
 }
 
 model Recipe {
-  id      String @id
-  name    String
-  tags    String
-  slot    String
-  kcal    Int
-  protein Int
-  carb    Int
-  fat     Int
+  id       String @id
+  memberId String @default("local")
+  name     String
+  tags     String
+  slot     String
+  kcal     Int
+  protein  Int
+  carb     Int
+  fat      Int
+
+  @@index([memberId])
 }
 
 model NutritionTarget {
-  id      String @id
-  kcal    Int
-  protein Int
-  carb    Int
-  fat     Int
+  id       String @id
+  memberId String @unique @default("local")
+  kcal     Int
+  protein  Int
+  carb     Int
+  fat      Int
 }
 
 model Device {
@@ -105,44 +163,65 @@ model Alert {
 
 model Trip {
   id          String  @id
+  memberId    String  @default("local")
   title       String
   status      String
   transport   String
   dateLabel   String
+  startDate   String?
+  endDate     String?
   tickets     String
   timeline    String
   packing     String
   prepAdopted Boolean @default(false)
+
+  @@index([memberId])
 }
 
 model Expense {
-  id       String @id
-  tag      String
+  id          String      @id
+  memberId    String      @default("local")
+  tag         String
   amountCents BigInt
-  date     String
-  merchant String
-  note     String
-  tripId   String @default("")
-  billImport BillImport?
+  date        String
+  merchant    String
+  note        String
+  tripId      String      @default("")
+  fingerprint String?
+  billImport  BillImport?
+
+  @@unique([memberId, id])
+  @@unique([memberId, fingerprint])
+  @@index([memberId, date, id])
+  @@index([memberId, tripId])
 }
 
 model BillImport {
-  expenseId String @id
-  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  source    String
-  rowKey    String? @unique
-  platformKey String? @unique
+  expenseId     String
+  memberId      String  @default("local")
+  expense       Expense @relation(fields: [memberId, expenseId], references: [memberId, id], onDelete: Cascade)
+  source        String
+  rowKey        String?
+  platformKey   String?
   transactionId String?
+
+  @@id([memberId, expenseId])
+  @@unique([memberId, rowKey])
+  @@unique([memberId, platformKey])
 }
 
 model PackingTemplate {
-  id    String @id
-  name  String
-  items String
+  id       String @id
+  memberId String @default("local")
+  name     String
+  items    String
+
+  @@index([memberId])
 }
 
 model Budget {
   id         String @id
+  memberId   String @unique @default("local")
   totalCents BigInt
   clothCents BigInt
   foodCents  BigInt
@@ -151,14 +230,16 @@ model Budget {
 }
 
 model Notice {
-  id     String  @id
-  outfit Boolean
-  budget Boolean
-  device Boolean
+  id       String  @id
+  memberId String  @unique @default("local")
+  outfit   Boolean
+  budget   Boolean
+  device   Boolean
 }
 
 model QuickMealDraft {
   id         String   @id @default(uuid())
+  memberId   String   @default("local")
   requestId  String   @unique
   text       String
   date       String

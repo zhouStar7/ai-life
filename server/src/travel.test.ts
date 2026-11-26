@@ -7,9 +7,11 @@ import { serve } from '@hono/node-server';
 import { PrismaClient } from '@prisma/client';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { inferTripDates, tripStatus } from '../../shared/trips.js';
 import { draftFromModel, parseItinerary } from './adapters/itinerary.js';
 import { createApp } from './app.js';
 import { seedIfEmpty } from './seed.js';
+import { migrateTripDates } from './tripDates.js';
 import { pickTravelOutfit } from './tripPlan.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'ai-life-travel-'));
@@ -105,6 +107,19 @@ test('looser notes still become a timeline and nonsense stays empty', () => {
   assert.equal(parseItinerary('今天随便写一句'), null);
 });
 
+test('trip dates preserve explicit years, roll over at New Year and include both endpoints', () => {
+  const dates = inferTripDates('12月31日 – 1月2日', ['2028-01-02 02:15'], '2026-11-26');
+  assert.deepEqual(dates, { startDate: '2027-12-31', endDate: '2028-01-02' });
+  assert.equal(tripStatus(dates, '2027-12-30'), '即将开始');
+  assert.equal(tripStatus(dates, '2027-12-31'), '进行中');
+  assert.equal(tripStatus(dates, '2028-01-02'), '进行中');
+  assert.equal(tripStatus(dates, '2028-01-03'), '已结束');
+  assert.deepEqual(inferTripDates('2025-02-29', ['08:30'], '2026-11-26'), { startDate: null, endDate: null });
+  const flight = parseItinerary('2030年12月31日 CA1501 上海虹桥 08:30 起飞，10:40 抵达北京首都。北京国贸酒店，12月31日入住，1月2日离店。');
+  assert.equal(flight?.startDate, '2030-12-31');
+  assert.equal(flight?.endDate, '2031-01-02');
+});
+
 test('a saved model fills a draft when the rules cannot, and the person still confirms by importing', async () => {
   const blocked = await json('/api/trips/parse', { method: 'POST', body: JSON.stringify({ text: '下周三去成都，晚上住一晚，车次没按固定格式写' }) });
   assert.equal(blocked.status, 422);
@@ -191,19 +206,22 @@ test('packing lines become a template and ticket costs stay on the trip', async 
 test('railway SMS and overnight flight email support correction and repeat import', async () => {
   const post = (url: string, data: unknown) => json(url, { method: 'POST', body: JSON.stringify(data) });
   const samples = [
-    { text: '【铁路12306】您已购2026年12月2日08:00上海虹桥至北京南G12次列车车票。', code: 'G12', from: '上海虹桥', to: '北京南', arrival: '待确认' },
-    { text: '您的航班预订已确认\n航班号：MU5123\n起飞时间：2026/12/02 23:50 上海虹桥 T2\n抵达时间：2026/12/03 02:15 北京首都 T3', code: 'MU5123', from: '上海虹桥 T2', to: '北京首都 T3', arrival: '2026-12-03 02:15' },
+    { text: '【铁路12306】您已购2026年12月2日08:00上海虹桥至北京南G12次列车车票。', code: 'G12', from: '上海虹桥', to: '北京南', arrival: '待确认', startDate: '2026-12-02', endDate: '2026-12-02' },
+    { text: '您的航班预订已确认\n航班号：MU5123\n起飞时间：2026/12/31 23:50 上海虹桥 T2\n抵达时间：2027/01/01 02:15 北京首都 T3', code: 'MU5123', from: '上海虹桥 T2', to: '北京首都 T3', arrival: '2027-01-01 02:15', startDate: '2026-12-31', endDate: '2027-01-01' },
   ];
-  for (const { text, code, from, to, arrival } of samples) {
+  for (const { text, code, from, to, arrival, startDate, endDate } of samples) {
     const parsed = await post('/api/trips/parse', { text });
     assert.equal(parsed.status, 200);
     const draft = parsed.body.draft;
     assert.equal(draft.source, 'rules');
     assert.equal(draft.existingTrip, null);
+    assert.equal(draft.startDate, startDate);
+    assert.equal(draft.endDate, endDate);
     assert.equal(draft.tickets[0].label, code);
     assert.equal(draft.timeline[0].detail, from);
     assert.deepEqual(draft.timeline[1], { title: '抵达', detail: to, time: arrival });
     draft.title = `${code} 确认行程`;
+    draft.endDate = '2027-01-03';
     draft.timeline[1].detail += ' 接站';
     const before = await db.trip.count();
     const saved = await post('/api/trips/import', { draft });
@@ -215,8 +233,28 @@ test('railway SMS and overnight flight email support correction and repeat impor
     assert.equal(duplicate.body.duplicate, true);
     const trip = duplicate.body.snapshot.trips.find((row: { id: string }) => row.id === repeat.existingTrip.id);
     assert.deepEqual(trip.timeline, draft.timeline);
+    assert.equal(trip.startDate, startDate);
+    assert.equal(trip.endDate, draft.endDate);
     assert.equal(await db.trip.count(), before + 1);
   }
+});
+
+test('manual trip dates are validated and legacy trip dates are backfilled', async () => {
+  const post = (data: unknown) => json('/api/trips', { method: 'POST', body: JSON.stringify(data) });
+  const reversed = await post({ title: '无效行程', startDate: '2030-07-06', endDate: '2030-07-05' });
+  assert.equal(reversed.status, 400);
+  assert.equal(reversed.body.error, 'invalid_date');
+  const created = await post({ title: '单日行程', startDate: '2030-07-05' });
+  assert.equal(created.status, 200);
+  const trip = created.body.snapshot.trips.find((item: { title: string }) => item.title === '单日行程');
+  assert.equal(trip.startDate, '2030-07-05');
+  assert.equal(trip.endDate, '2030-07-05');
+  await db.trip.update({ where: { id: trip.id }, data: { startDate: null, endDate: null, dateLabel: '2030年7月5日 – 7月6日' } });
+  await migrateTripDates(db);
+  await migrateTripDates(db);
+  const migrated = await db.trip.findUniqueOrThrow({ where: { id: trip.id } });
+  assert.equal(migrated.startDate, '2030-07-05');
+  assert.equal(migrated.endDate, '2030-07-06');
 });
 
 test('travel preview separates the selected month from the whole trip', async () => {

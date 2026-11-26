@@ -4,6 +4,7 @@ import { isTag, type BillDraft } from './adapters/bills.js';
 import { uid } from './ids.js';
 import { isLocalDate } from './localDate.js';
 import { centsToYuan, yuanToCents } from './money.js';
+import { currentMemberId } from './requestContext.js';
 
 function keys(row: BillDraft) {
   const source = ['wechat', 'alipay', 'csv', 'image'].includes(row.source ?? '') ? row.source! : 'csv';
@@ -18,7 +19,12 @@ function signature(date: string, merchant: string, cents: bigint) {
 
 /** Classify against both the committed ledger and preceding accepted rows of this batch. */
 export async function prepareBills(db: Prisma.TransactionClient, rows: BillDraft[]) {
-  const existing = await db.expense.findMany({ select: { date: true, merchant: true, amountCents: true, billImport: true } });
+  const memberId = currentMemberId();
+  const existing = await db.expense.findMany({
+    where: { memberId },
+    select: { date: true, merchant: true, amountCents: true, billImport: true, fingerprint: true },
+  });
+  const legacy = new Set(existing.map(({ fingerprint }) => fingerprint).filter(Boolean));
   const exact = new Set<string>();
   const signatures = new Set<string>();
   const withoutId = new Set<string>();
@@ -40,8 +46,11 @@ export async function prepareBills(db: Prisma.TransactionClient, rows: BillDraft
     const cents = yuanToCents(row.amount);
     const merchant = typeof row.merchant === 'string' ? row.merchant.trim() : '';
     const key = signature(row.date, merchant, cents ?? 0n);
+    const note = typeof row.note === 'string' ? row.note.trim() : '';
+    const legacyKey = `fp:${row.date}|${merchant}|${cents}|${note}`;
+    const legacySource = identity.transactionId && legacy.has(`src:${identity.transactionId}`);
     let status: BillStatus = 'new';
-    if (exact.has(identity.rowKey ?? '') || exact.has(identity.platformKey ?? '')) status = 'duplicate';
+    if (exact.has(identity.rowKey ?? '') || exact.has(identity.platformKey ?? '') || legacy.has(legacyKey) || legacySource) status = 'duplicate';
     else if (!isLocalDate(row.date) || !isTag(row.tag) || !cents || !merchant) status = 'incomplete';
     else if (identity.platformKey ? withoutId.has(key) : signatures.has(key)) status = 'review';
     classified.push({ ...row, status });

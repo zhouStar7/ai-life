@@ -2,11 +2,14 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { PrismaClient } from '@prisma/client';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from './app.js';
+import { openSession } from './auth.js';
+import { ensureMemberData } from './members.js';
 import { SEED_ITEMS } from './seedData.js';
 import { seedIfEmpty } from './seed.js';
 import { draftsFromOrder, planOutfit, similarItems } from './wardrobePlan.js';
@@ -81,6 +84,10 @@ test('order text becomes clothing drafts and skips totals', () => {
   assert.equal(drafts[1].category, '外套');
   assert.equal(drafts[1].occasion, '正式');
   assert.equal(drafts[1].color, '藏青');
+  assert.equal(drafts[0].price, undefined);
+  assert.equal(drafts[1].price, 899);
+  assert.equal(draftsFromOrder('黑色外套 ￥1,299.90')[0].price, 1299.9);
+  assert.equal(draftsFromOrder('黑色外套 ¥19.999')[0].price, undefined);
 });
 
 test('suggestion and order drafts stay on the closet without a model', async () => {
@@ -118,4 +125,97 @@ test('similarity hints allow all ten synthetic garments to be saved and read bac
   const { body } = await json('/api/snapshot');
   const garments = body.items.filter((item: { name: string }) => item.name.startsWith('试穿外套 '));
   assert.deepEqual(garments.map((item: { name: string }) => item.name).sort(), items.map(item => item.name).sort());
+});
+
+test('wardrobe price and photo persist privately without creating an expense', async () => {
+  const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4hQAAAAASUVORK5CYII=';
+  const name = '成员通过照片录入的黑色上衣';
+  for (const id of ['local', 'wardrobe-peer']) {
+    await db.member.create({ data: { id, username: id, name: id, passwordHash: '', createdAt: '2026-01-01' } });
+    await ensureMemberData(db, id);
+  }
+  const owner = `ailife=${await openSession(db, 'local')}`;
+  const peer = `ailife=${await openSession(db, 'wardrobe-peer')}`;
+  const app = createApp(db, { auth: true });
+  const write = (path: string, body: unknown, cookie = owner, method = 'POST') => app.request(path, {
+    method, headers: { cookie, 'content-type': 'application/json', 'idempotency-key': `wardrobe-test-${crypto.randomUUID()}` },
+    body: JSON.stringify(body),
+  });
+  const expenseCount = await db.expense.count();
+  const created = await write('/api/items/batch', {
+    createdAt: '2026-05-07', items: [{ name, category: '上衣', color: '黑色', cover, price: 109.99 }],
+  });
+  assert.equal(created.status, 200);
+  const { snapshot } = await created.json();
+  const item = snapshot.items.find((row: { name: string }) => row.name === name);
+  assert.ok(item);
+  assert.equal(item.price, 109.99);
+  assert.equal(item.createdAt, '2026-05-07');
+  assert.equal(item.priceCents, undefined);
+  assert.equal(item.memberId, undefined);
+  assert.equal(await db.expense.count(), expenseCount);
+  assert.equal((await db.wardrobeItem.findUniqueOrThrow({ where: { id: item.id } })).priceCents, 10999n);
+  assert.match(item.cover, /^\/api\/items\/[^/]+\/cover\?v=/);
+
+  const expense = await write('/api/expenses', { tag: '衣', date: item.createdAt, amount: item.price, merchant: name });
+  assert.equal(expense.status, 200);
+  const recorded = await db.expense.findFirstOrThrow({ where: { merchant: name } });
+  assert.equal(recorded.date, '2026-05-07');
+  assert.equal(recorded.amountCents, 10999n);
+
+  const image = await app.request(item.cover, { headers: { cookie: owner } });
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('cache-control'), 'private, no-store');
+  assert.equal(image.headers.get('content-type'), 'image/png');
+  assert.equal(Buffer.from(await image.arrayBuffer()).toString('base64'), cover.split(',')[1]);
+  assert.equal((await app.request(item.cover)).status, 401);
+  assert.equal((await app.request(item.cover, { headers: { cookie: peer } })).status, 404);
+  assert.equal((await write(`/api/items/${item.id}`, { price: 2 }, peer, 'PATCH')).status, 404);
+  assert.equal((await write('/api/outfits', { itemIds: [item.id] }, peer)).status, 400);
+  assert.equal((await write('/api/wardrobe/suggestion/adopt', { itemIds: [item.id] }, peer)).status, 400);
+
+  const edited = await write(`/api/items/${item.id}`, { price: null, cover: item.cover }, owner, 'PATCH');
+  assert.equal(edited.status, 200);
+  const editedItem = (await edited.json()).snapshot.items.find((row: { id: string }) => row.id === item.id);
+  assert.equal(editedItem.price, null);
+  assert.equal(editedItem.cover, item.cover);
+  assert.equal((await write(`/api/items/${item.id}`, { cover: '' }, owner, 'PATCH')).status, 200);
+  assert.equal((await app.request(item.cover, { headers: { cookie: owner } })).status, 404);
+  assert.equal(await db.wardrobePhoto.count(), 0);
+});
+
+test('configured model uses closet IDs and falls back when no valid choice is returned', async () => {
+  const mock = new Hono();
+  let modelAnswer = { itemIds: ['missing', 'w1', 'w1', 'w5'], reason: '选择两件衣橱单品' };
+  let requestText = '';
+  mock.post('/v1/chat/completions', async (c) => {
+    requestText = await c.req.text();
+    return c.json({ choices: [{ message: { content: JSON.stringify(modelAnswer) } }] });
+  });
+  const provider = serve({ fetch: mock.fetch, port: 0, hostname: '127.0.0.1' });
+  try {
+    if (!provider.listening) await new Promise<void>((resolve) => provider.once('listening', resolve));
+    const address = provider.address();
+    assert.ok(address && typeof address !== 'string');
+    await db.profile.update({ where: { id: 'local' }, data: { modelBase: `http://127.0.0.1:${address.port}/v1` } });
+    const { body } = await json('/api/wardrobe/suggestion');
+    assert.equal(body.source, 'model');
+    assert.deepEqual(body.itemIds, ['w1', 'w5']);
+    assert.match(requestText, /w1/);
+    assert.equal(requestText.includes('data:image/'), false);
+    assert.equal((await json('/api/wardrobe/suggestion?avoid=w1&avoid=w5')).body.source, 'rules');
+    modelAnswer = { itemIds: ['unknown'], reason: '' };
+    const fallback = await json('/api/wardrobe/suggestion');
+    assert.equal(fallback.body.source, 'rules');
+    assert.ok(fallback.body.itemIds.length);
+    const before = await db.wardrobeItem.findMany({ where: { id: { in: body.itemIds } }, orderBy: { id: 'asc' } });
+    const payload = { method: 'POST', body: JSON.stringify({ itemIds: body.itemIds }) };
+    assert.equal((await json('/api/wardrobe/suggestion/adopt', payload)).body.adopted, true);
+    assert.equal((await json('/api/wardrobe/suggestion/adopt', payload)).body.adopted, false);
+    const updated = await db.wardrobeItem.findMany({ where: { id: { in: body.itemIds } }, orderBy: { id: 'asc' } });
+    assert.deepEqual(updated.map((item) => item.wears), before.map((item) => item.wears + 1));
+  } finally {
+    provider.close();
+    await db.profile.update({ where: { id: 'local' }, data: { modelBase: '' } });
+  }
 });

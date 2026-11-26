@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createContext, useContext } from 'react';
-import { api, ApiError, errorDetail } from './api/client';
-import { demoMode, loadSnapshot, saveSnapshot } from './api/snapshot';
+import { api, ApiError, errorDetail, mutationKey } from './api/client';
+import { loadSnapshot, saveSnapshot } from './api/snapshot';
 import { localDate } from './localDate';
 import { estimateMeal as estimateMealText, pickRecipe, type MealDraft } from './dietPlan';
 import { HomeConfirmation, type HomePreview, type HomeResult } from './components/HomeConfirmation';
@@ -48,6 +48,8 @@ type Source = 'loading' | 'api' | 'cached' | 'offline' | 'demo';
 interface StoreValue {
   source: Source;
   offlineViewer: boolean;
+  cacheMemberId: string | null;
+  cacheSession?: string;
   demoMode: boolean;
   saving: boolean;
   writeMessage: string;
@@ -100,7 +102,7 @@ interface StoreValue {
   dismissHomeAlerts: () => Promise<boolean>;
   selectTrip: (id: string) => Promise<boolean>;
   togglePack: (tripId: string, packId: string) => Promise<boolean>;
-  addTrip: (input: Pick<Trip, 'title' | 'status' | 'transport' | 'dateLabel'>) => Promise<boolean>;
+  addTrip: (input: Pick<Trip, 'title' | 'status' | 'transport' | 'dateLabel' | 'startDate' | 'endDate'>) => Promise<boolean>;
   removeTrip: (id: string) => Promise<boolean>;
   adoptPrep: (tripId: string, confirmation: string) => Promise<boolean>;
   addExpense: (input: Omit<Expense, 'id'>) => Promise<boolean>;
@@ -134,7 +136,7 @@ interface StoreValue {
   model: { configured: boolean; baseUrl: string; model: string };
   home: HomeLink;
   packingTemplates: PackingTemplate[];
-  suggestion: { title: string; reason: string; itemIds: string[] };
+  suggestion: { title: string; reason: string; itemIds: string[]; source: 'model' | 'rules' };
 }
 
 type RemoteSnapshot = {
@@ -193,7 +195,13 @@ function nextDevice(device: Device, scene: SceneName): Device {
   return device;
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+export function StoreProvider({ children, cacheMemberId, cacheSession, demoMode = false, reconnectSession }: {
+  children: ReactNode;
+  cacheMemberId: string | null;
+  cacheSession?: string;
+  demoMode?: boolean;
+  reconnectSession?: () => Promise<boolean>;
+}) {
   const [items, setItems] = useState<WardrobeItem[]>(demoMode ? SEED_ITEMS : []);
   const [outfits, setOutfits] = useState<Outfit[]>(demoMode ? SEED_OUTFITS : []);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
@@ -214,14 +222,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [adoptedTips, setAdoptedTips] = useState<string[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [weatherLabel, setWeatherLabel] = useState(demoMode ? '22°C 多云' : '');
-  const [offlineViewer, setOfflineViewer] = useState(false);
-  const [source, setSource] = useState<Source>('loading');
+  const [offlineViewer, setOfflineViewer] = useState(Boolean(reconnectSession));
+  const [source, setSource] = useState<Source>(reconnectSession ? 'offline' : 'loading');
   const [saving, setSaving] = useState(false);
   const [writeMessage, setWriteMessage] = useState('');
   const [weatherInfo, setWeatherInfo] = useState({ weatherCity: '', weatherSource: '', weatherUpdatedAt: '' });
   const busy = useRef(false);
   const uncertain = useRef(false);
-  const sourceRef = useRef<Source>('loading');
+  const unconfirmedWrite = useRef<{ path: string; method?: string; body?: RequestInit['body']; key: string } | null>(null);
+  const sourceRef = useRef<Source>(reconnectSession ? 'offline' : 'loading');
 
   function changeSource(next: Source) {
     sourceRef.current = next;
@@ -272,17 +281,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setOfflineViewer(false);
     changeSource('api');
     // The database has already acknowledged the request. Browser caching is optional.
-    void saveSnapshot(snapshot).catch(() => {});
+    void saveSnapshot(cacheMemberId, snapshot, cacheSession).catch(() => {});
   }
 
   useEffect(() => {
+    if (reconnectSession) return;
     let cancelled = false;
     async function start() {
       try {
         const snapshot = await api<RemoteSnapshot>('/api/snapshot');
         if (!cancelled) acceptSnapshot(snapshot);
       } catch {
-        const cached = await loadSnapshot().catch(() => null);
+        const cached = await loadSnapshot(cacheMemberId, cacheSession).catch(() => null);
         if (cancelled) return;
         setOfflineViewer(!demoMode);
         changeSource(demoMode ? 'demo' : cached ? 'cached' : 'offline');
@@ -298,6 +308,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     busy.current = true;
     setSaving(true);
     try {
+      if (reconnectSession) return await reconnectSession();
       acceptSnapshot(await api<RemoteSnapshot>('/api/snapshot'));
       setWriteMessage(uncertain.current ? '已刷新记录。请核对上次操作，仅在确实需要时再次提交。' : '已重新连接，可以再次提交。');
       uncertain.current = false;
@@ -324,12 +335,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setWriteMessage(uncertain.current ? '上次操作结果待确认。请先刷新记录并核对。' : '未保存。请连接本地服务后再提交。');
       return false;
     }
+    const previous = unconfirmedWrite.current;
+    const headers = new Headers(init.headers);
+    const key = previous?.path === path && previous.method === init.method && previous.body === init.body
+      ? previous.key : headers.get('idempotency-key') ?? mutationKey();
+    headers.set('idempotency-key', key);
     busy.current = true;
     setSaving(true);
     setWriteMessage('');
     try {
-      const body = await api<WriteResponse>(path, init);
+      const body = await api<WriteResponse>(path, { ...init, headers });
       acceptSnapshot(body.snapshot);
+      unconfirmedWrite.current = null;
       if (body.error) {
         setWriteMessage(`操作未完成：${new ApiError(200, body.error).message}。请检查连接或设置后重试。`);
         return false;
@@ -337,9 +354,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saved?.(body);
       return true;
     } catch (error) {
-      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408) {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && ![408, 425].includes(error.status) && !error.uncertain) {
+        unconfirmedWrite.current = null;
         setWriteMessage(`未保存：${errorDetail(error)}。请核对输入后重试。`);
       } else {
+        unconfirmedWrite.current = { path, method: init.method, body: init.body, key };
         uncertain.current = true;
         changeSource('cached');
         setWriteMessage(`保存结果待确认：${errorDetail(error)}。请先刷新并核对记录，以免重复操作。`);
@@ -351,10 +370,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const suggestion = useMemo(
-    () => planOutfit(items, suggestionIndex, weatherOn, weatherLabel),
+  const localSuggestion = useMemo(
+    () => ({ ...planOutfit(items, suggestionIndex, weatherOn, weatherLabel), source: 'rules' as const }),
     [items, suggestionIndex, weatherLabel, weatherOn],
   );
+  const [remoteSuggestion, setRemoteSuggestion] = useState<{ key: string; value: StoreValue['suggestion'] } | null>(null);
+  const avoidSuggestion = useRef<{ index: number; ids: string[] } | null>(null);
+  const suggestionKey = useMemo(() => source === 'api' && model.configured && items.length ? JSON.stringify([
+    model.baseUrl, model.model, suggestionIndex, weatherOn, weatherLabel,
+    items.map(({ id, name, category, season, color, occasion }) => [id, name, category, season, color, occasion]).sort(),
+  ]) : '', [items, model, source, suggestionIndex, weatherOn, weatherLabel]);
+  useEffect(() => {
+    if (!suggestionKey) return;
+    const request = new AbortController();
+    const query = new URLSearchParams();
+    if (avoidSuggestion.current?.index === suggestionIndex) {
+      for (const id of avoidSuggestion.current.ids) query.append('avoid', id);
+    }
+    void api<StoreValue['suggestion']>(`/api/wardrobe/suggestion?${query}`, { signal: request.signal }).then((value) => {
+      if (!request.signal.aborted) setRemoteSuggestion({ key: suggestionKey, value });
+    }).catch(() => { /* The rule-based suggestion remains available. */ });
+    return () => request.abort();
+  }, [suggestionKey, suggestionIndex]);
+  const candidate = suggestionKey && remoteSuggestion?.key === suggestionKey ? remoteSuggestion.value : null;
+  const suggestion = candidate?.source === 'model' && candidate.itemIds.length > 0
+    && candidate.itemIds.every((id) => items.some((item) => item.id === id)) ? candidate : localSuggestion;
 
   function toast(message: string) {
     const id = uid('toast');
@@ -424,7 +464,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     suggestion,
     weatherLabel,
     online: source === 'api',
-    source, offlineViewer, demoMode, saving, writeMessage, reconnect,
+    source, offlineViewer, cacheMemberId, cacheSession, demoMode, saving, writeMessage, reconnect,
     ...weatherInfo,
     refreshWeather: (city) => commit('/api/weather/refresh', { method: 'POST', body: JSON.stringify({ city }) }),
     model,
@@ -517,7 +557,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     adoptOutfitSuggestion: async () => {
       if (outfitAdopted || suggestion.itemIds.length === 0) return false;
-      return commit('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'outfit' }) }, () => {
+      return commit('/api/wardrobe/suggestion/adopt', { method: 'POST', body: JSON.stringify({ itemIds: suggestion.itemIds }) }, () => {
         bumpWears(suggestion.itemIds);
         setOutfitAdopted(true);
         markTip('outfit');
@@ -529,7 +569,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSuggestionIndex((index) => index + 1);
         setOutfitAdopted(false);
         toast('换了一套建议');
-      }, () => toast('换了一套建议'));
+      }, ({ snapshot }) => {
+        avoidSuggestion.current = { index: snapshot.suggestionIndex, ids: suggestion.itemIds };
+        toast('换了一套建议');
+      });
     },
     toggleWeather: async () => {
       return commit('/api/session/weather', { method: 'POST' }, () => {

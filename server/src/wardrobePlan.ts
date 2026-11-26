@@ -1,3 +1,5 @@
+import { centsToYuan, yuanToCents } from './money.js';
+
 export type ClosetItem = {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export type ClothingDraft = {
   season: string;
   color: string;
   occasion: string;
+  price?: number;
 };
 
 const LOW_WEAR = 4;
@@ -83,9 +86,13 @@ export function draftsFromOrder(text: string): ClothingDraft[] {
 }
 
 function draftFromLine(line: string): ClothingDraft | null {
+  const pricePattern = /[¥￥]\s*([+-]?\d[\d,]*(?:\.\d+)?)/g;
+  const prices = [...line.matchAll(pricePattern)];
+  const amount = prices.length === 1 ? prices[0][1] : '';
+  const cents = /^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(amount) ? yuanToCents(amount.replaceAll(',', '')) : null;
   const cleaned = line
     .replace(/^(商品名称|商品|名称)\s*[:：]\s*/, '')
-    .replace(/[¥￥]\s*\d+(?:\.\d+)?/g, '')
+    .replace(pricePattern, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!cleaned || /^(订单|合计|实付|运费|店铺|快递)/.test(cleaned)) return null;
@@ -93,6 +100,7 @@ function draftFromLine(line: string): ClothingDraft | null {
   if (!category) return null;
   return {
     name: cleaned.slice(0, 40),
+    ...(cents === null ? {} : { price: centsToYuan(cents) }),
     category,
     color: COLORS.find((color) => cleaned.includes(color)) ?? '',
     occasion: STYLES.find((style) => cleaned.includes(style)) ?? '通勤',

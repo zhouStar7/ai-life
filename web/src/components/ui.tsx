@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { monthExpenses, sumAmount, yuan } from '../format';
 import { useStore } from '../store';
@@ -46,17 +46,49 @@ export function SaveStatus({ compact = false }: { compact?: boolean }) {
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const { saving } = useStore();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  const savingRef = useRef(saving);
+  const [previousFocus] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  useEffect(() => { closeRef.current = onClose; savingRef.current = saving; }, [onClose, saving]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!saving && event.key === 'Escape') onClose();
-    };
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const root = document.documentElement;
+    const selector = '.modal[role="dialog"]';
+    root.dataset.modal = 'open';
+    if (!dialog.contains(document.activeElement)) dialog.focus();
+
+    function onKey(event: KeyboardEvent) {
+      const dialogs = document.querySelectorAll(selector);
+      if (dialogs[dialogs.length - 1] !== dialog) return;
+      if (event.key === 'Escape' && !savingRef.current) {
+        event.preventDefault();
+        closeRef.current();
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary, [tabindex="0"]'))
+        .filter((element) => !element.matches(':disabled') && element.tabIndex >= 0 && element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!first || !dialog.contains(active) || active === dialog || active === (event.shiftKey ? first : last)) {
+        event.preventDefault();
+        (event.shiftKey ? last ?? dialog : first ?? dialog).focus();
+      }
+    }
+
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, saving]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (!Array.from(document.querySelectorAll(selector)).some((other) => other !== dialog)) delete root.dataset.modal;
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [previousFocus]);
 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+      <div className="modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <header>
           <h2>{title}</h2>
           <button type="button" disabled={saving} onClick={onClose} aria-label="关闭">×</button>

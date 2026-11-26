@@ -4,6 +4,7 @@ import { estimateMeal, mealDate, pickRecipe, recipeTags } from '../dietPlan.js';
 import { isLocalDate, localDate } from '../localDate.js';
 import { uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
+import { currentMemberId } from '../requestContext.js';
 
 const SLOTS = ['早餐', '午餐', '晚餐', '加餐'];
 
@@ -138,7 +139,7 @@ export function registerDiet(app: Hono, db: PrismaClient) {
   app.put('/api/nutrition-target', async (c) => {
     const body = await c.req.json();
     await db.nutritionTarget.update({
-      where: { id: 'local' },
+      where: { memberId: currentMemberId() },
       data: { kcal: Number(body.kcal) || 0, protein: Number(body.protein) || 0, carb: Number(body.carb) || 0, fat: Number(body.fat) || 0 },
     });
     return c.json({ snapshot: await readSnapshot(db) });

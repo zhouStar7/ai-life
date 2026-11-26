@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { api } from '../api/client';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { monthExpenses, percentChange, reportMonth, share, yuan } from '../format';
 import { isMonth, spendingSummary } from '../../../shared/spending';
@@ -6,7 +7,7 @@ import { localDate, useLocalDate } from '../localDate';
 import { TAG_COLOR } from '../seed';
 import { modelDestination } from '../../../shared/modelEndpoint';
 import { useStore } from '../store';
-import { SPEND_TAGS, type BillDraft, type BillImportReceipt, type SpendTag } from '../types';
+import { SPEND_TAGS, type BillDraft, type BillImportReceipt, type Expense, type SpendTag } from '../types';
 import { Empty, Field, Modal, Progress } from '../components/ui';
 
 export function SpendingPage() {
@@ -24,8 +25,8 @@ export function SpendingPage() {
   const requestedMonth = params.get('month');
   const period = isMonth(requestedMonth) ? requestedMonth : reportMonth(today);
   const { monthTotal: total, byTag, trend } = spendingSummary(store.expenses, period, (row) => BigInt(Math.round(row.amount * 100)));
-  const filtered = monthExpenses(store.expenses, tag === '全部' ? undefined : tag, period);
-  const rows = [...filtered].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
+  const ledgerParams = new URLSearchParams({ month: period, limit: String(LEDGER_PAGE_SIZE) });
+  if (tag !== '全部') ledgerParams.set('tag', tag);
   const previous = trend[4].amount;
   const change = previous > 0 ? percentChange(total, previous) : null;
   const remain = store.budgets.total - total;
@@ -156,19 +157,7 @@ export function SpendingPage() {
             <button type="button" key={item} data-testid={`filter-${item}`} className={tag === item ? 'pill active' : 'pill'} onClick={() => selectFilter('tag', item)}>{item}</button>
           ))}
         </div>
-        {rows.length === 0 ? (
-          <Empty title={tag === '全部' ? '还没有流水' : `「${tag}」下面还没有流水`} desc="记一笔就能出现在这里。" action={<button type="button" className="btn" onClick={() => setAdding(true)}>记一笔</button>} />
-        ) : rows.map((item) => (
-          <div className="txn" key={item.id}>
-            <span className={`tag tag-${item.tag}`}>{item.tag}</span>
-            <div>
-              <strong>{item.merchant}</strong>
-              <p className="muted">{item.date.slice(5)} · {item.note}</p>
-            </div>
-            <strong>{yuan(item.amount)}</strong>
-            <button type="button" className="btn-text small" onClick={() => store.removeExpense(item.id)}>删除</button>
-          </div>
-        ))}
+        <ExpenseLedger key={ledgerParams.toString()} query={ledgerParams.toString()} month={period} tag={tag} onAdd={() => setAdding(true)} />
       </article>
       <article className="card">
         <h2>省钱建议</h2>
@@ -202,6 +191,64 @@ export function SpendingPage() {
       <input ref={shotRef} hidden type="file" accept="image/*" onChange={(event) => { void onBillFile(event.target.files?.[0], 'image'); }} />
     </>
   );
+}
+
+const LEDGER_PAGE_SIZE = 30;
+type LedgerPage = { rows: Expense[]; nextCursor: string | null; total: number };
+
+function ExpenseLedger({ query, month, tag, onAdd }: { query: string; month: string; tag: SpendTag | '全部'; onAdd: () => void }) {
+  const { expenses, online, removeExpense } = useStore();
+  const requests = useRef<AbortController | null>(null);
+  const [result, setResult] = useState<{ version: Expense[]; page: LedgerPage } | null>(null);
+  const [visible, setVisible] = useState(LEDGER_PAGE_SIZE);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const page = online && result?.version === expenses ? result.page : null;
+  const local = monthExpenses(expenses, tag === '全部' ? undefined : tag, month)
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.id > a.id ? 1 : -1));
+  const rows = page?.rows ?? local.slice(0, visible);
+
+  useEffect(() => {
+    if (!online) return;
+    const controller = new AbortController();
+    requests.current = controller;
+    void api<LedgerPage>(`/api/expenses?${query}`, { signal: controller.signal }).then((page) => {
+      if (!controller.signal.aborted) { setResult({ version: expenses, page }); setError(''); }
+    }).catch(() => undefined).finally(() => {
+      if (!controller.signal.aborted) setPending(false);
+    });
+    return () => controller.abort();
+  }, [expenses, online, query]);
+
+  async function more() {
+    if (!page) { setVisible((count) => count + LEDGER_PAGE_SIZE); return; }
+    const signal = requests.current?.signal;
+    if (!page.nextCursor || pending || !signal || signal.aborted) return;
+    setPending(true);
+    setError('');
+    try {
+      const next = await api<LedgerPage>(`/api/expenses?${query}&cursor=${encodeURIComponent(page.nextCursor)}`, { signal });
+      if (!signal.aborted) setResult({ version: expenses, page: { ...next, rows: [...page.rows, ...next.rows] } });
+    } catch {
+      if (!signal.aborted) setError('加载更多流水失败，请重试。');
+    } finally {
+      if (!signal.aborted) setPending(false);
+    }
+  }
+
+  if (!rows.length) return <Empty title={tag === '全部' ? '还没有流水' : `「${tag}」下面还没有流水`} desc="记一笔就能出现在这里。" action={<button type="button" className="btn" onClick={onAdd}>记一笔</button>} />;
+  return <>
+    {rows.map((item) => (
+      <div className="txn" key={item.id}>
+        <span className={`tag tag-${item.tag}`}>{item.tag}</span>
+        <div><strong>{item.merchant}</strong><p className="muted">{item.date.slice(5)} · {item.note}</p></div>
+        <strong>{yuan(item.amount)}</strong>
+        <button type="button" className="btn-text small" onClick={() => removeExpense(item.id)}>删除</button>
+      </div>
+    ))}
+    {error && <p role="status">{error}</p>}
+    {(page ? page.nextCursor : local.length > visible) && <button type="button" className="btn-ghost small" disabled={pending && !!page} onClick={() => void more()}>加载更多流水</button>}
+  </>;
 }
 
 function readBill(file: File, kind: 'data' | 'text') {

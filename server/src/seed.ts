@@ -1,5 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { DataMode } from './databaseEnvironment.js';
+import { ensureMemberData } from './members.js';
+import { inferTripDates } from '../../shared/trips.js';
 import { SEED_ALERTS, SEED_DEVICES, SEED_EXPENSES, SEED_ITEMS, SEED_MEALS, SEED_OUTFITS, SEED_RECIPES, SEED_TRIPS } from './seedData.js';
 
 async function isEmpty(db: Prisma.TransactionClient) {
@@ -19,16 +21,12 @@ export async function seedIfEmpty(db: PrismaClient, mode: DataMode = 'demo') {
     await tx.profile.upsert({ where: local, create: { ...local, name: demo ? '星宇' : '' }, update: {} });
     await tx.sessionState.upsert({
       where: local,
-      create: { ...local, weatherOn: demo, weatherLabel: demo ? '22°C 多云' : '', activeTripId: demo ? 't-bj' : '' },
+      create: { ...local, weatherOn: demo, weatherLabel: demo ? '22°C 多云' : '' },
       update: {},
     });
-    await tx.nutritionTarget.upsert({
-      where: local, create: { ...local, kcal: 1800, protein: 120, carb: 200, fat: 60 }, update: {},
-    });
-    await tx.budget.upsert({
-      where: local, create: { ...local, totalCents: 1_000_000n, clothCents: 200_000n, foodCents: 300_000n, homeCents: 150_000n, tripCents: 350_000n }, update: {},
-    });
-    await tx.notice.upsert({ where: local, create: { ...local, outfit: true, budget: true, device: true }, update: {} });
+    await ensureMemberData(tx, local.id, { demo });
+    const members = await tx.member.findMany({ where: { id: { not: local.id } }, select: { id: true } });
+    for (const { id } of members) await ensureMemberData(tx, id);
     if (demo) await seedDemoContent(tx);
   });
 }
@@ -54,6 +52,7 @@ async function seedDemoContent(db: Prisma.TransactionClient) {
   await db.trip.createMany({
     data: SEED_TRIPS.map((trip) => ({
       ...trip,
+      ...inferTripDates(trip.dateLabel, trip.timeline.map(({ time }) => time), '2026-09-01'),
       tickets: JSON.stringify(trip.tickets),
       timeline: JSON.stringify(trip.timeline),
       packing: JSON.stringify(trip.packing),

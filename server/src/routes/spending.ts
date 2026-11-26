@@ -2,11 +2,22 @@ import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { isTag, parseCsv, recognizeBill, type BillDraft } from '../adapters/bills.js';
 import { prepareBills } from '../billImport.js';
-import { isMonth } from '../../../shared/spending.js';
+import { defaultSpendingMonth, isMonth, spendingSummary } from '../../../shared/spending.js';
 import { isLocalDate, localDate } from '../localDate.js';
-import { expenseToYuan, yuanToCents } from '../money.js';
+import { centsToYuan, expenseToYuan, yuanToCents } from '../money.js';
 import { uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
+import { currentMemberId } from '../requestContext.js';
+
+function decodeCursor(cursor: string): { date: string; id: string } | null {
+  if (!/^[A-Za-z0-9_-]{1,512}$/.test(cursor)) return null;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    return isLocalDate(value?.date) && typeof value?.id === 'string' && value.id ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 export function registerSpending(app: Hono, db: PrismaClient) {
   app.post('/api/bills/preview', async (c) => {
@@ -53,12 +64,42 @@ export function registerSpending(app: Hono, db: PrismaClient) {
   app.get('/api/expenses', async (c) => {
     const tag = c.req.query('tag');
     const month = c.req.query('month');
+    const tripId = c.req.query('tripId');
     if (month !== undefined && !isMonth(month)) return c.json({ error: 'invalid_month' }, 400);
-    const rows = await db.expense.findMany({
-      where: { tag: isTag(tag) ? tag : undefined, date: month ? { startsWith: `${month}-` } : undefined },
-      orderBy: { date: 'desc' },
-    });
-    return c.json(rows.map(expenseToYuan));
+    const where = { tag: isTag(tag) ? tag : undefined, tripId, date: month ? { startsWith: `${month}-` } : undefined };
+    const orderBy = [{ date: 'desc' as const }, { id: 'desc' as const }];
+    const select = { id: true, tag: true, amountCents: true, date: true, merchant: true, note: true, tripId: true } as const;
+    const rawLimit = c.req.query('limit');
+    if (rawLimit === undefined) {
+      return c.json((await db.expense.findMany({ where, orderBy, select })).map(expenseToYuan));
+    }
+    if (!/^\d{1,3}$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 100) {
+      return c.json({ error: 'invalid_limit' }, 400);
+    }
+    const cursor = c.req.query('cursor');
+    const after = cursor ? decodeCursor(cursor) : null;
+    if (cursor && !after) return c.json({ error: 'invalid_cursor' }, 400);
+    const limit = Number(rawLimit);
+    const period = month ?? defaultSpendingMonth(localDate(), process.env.AI_LIFE_MODE === 'demo');
+    const first = spendingSummary([], period, () => 0n).trend[0].month;
+    const [items, totals, summaryRows] = await Promise.all([
+      db.expense.findMany({
+        where: { ...where, OR: after ? [{ date: { lt: after.date } }, { date: after.date, id: { lt: after.id } }] : undefined },
+        orderBy, select, take: limit + 1,
+      }),
+      db.expense.aggregate({ where, _count: true, _sum: { amountCents: true } }),
+      db.expense.findMany({
+        where: { date: { gte: `${first}-01`, lte: `${period}-31` } },
+        select: { date: true, tag: true, amountCents: true },
+      }),
+    ]);
+    const rows = items.slice(0, limit);
+    const last = rows.at(-1);
+    const nextCursor = items.length > limit && last
+      ? Buffer.from(JSON.stringify({ date: last.date, id: last.id })).toString('base64url')
+      : null;
+    return c.json({ rows: rows.map(expenseToYuan), nextCursor, total: totals._count,
+      amount: centsToYuan(totals._sum.amountCents ?? 0n), summary: spendingSummary(summaryRows, period, (row) => row.amountCents) });
   });
 
   app.post('/api/expenses', async (c) => {
@@ -104,7 +145,7 @@ export function registerSpending(app: Hono, db: PrismaClient) {
     if (totalCents === null || clothCents === null || foodCents === null || homeCents === null || tripCents === null) {
       return c.json({ error: 'invalid' }, 400);
     }
-    await db.budget.update({ where: { id: 'local' }, data: { totalCents, clothCents, foodCents, homeCents, tripCents } });
+    await db.budget.update({ where: { memberId: currentMemberId() }, data: { totalCents, clothCents, foodCents, homeCents, tripCents } });
     return c.json({ snapshot: await readSnapshot(db) });
   });
 }

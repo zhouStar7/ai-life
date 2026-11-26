@@ -31,6 +31,8 @@ npm ci --prefix server/mcp
 
 `AI_LIFE_MCP_DB` 必须指向已有 SQLite 文件。使用个人数据时，将路径换成个人数据库，并把 `AI_LIFE_MODE` 设为 `personal`。数据库选择始终取决于文件路径；模式只影响默认预算月份。启动器可以在任意工作目录运行。stdout 专供 MCP 协议，启动错误输出到 stderr。
 
+工具只读取一个账号的数据，默认账号 ID 为 `local`。旧版账号使用其他 ID 时，可在同一个 `env` 中设置 `AI_LIFE_MCP_MEMBER_ID`。天气来自共享配置。
+
 ## 查询工具
 
 | 名称 | 调用参数示例 | 返回内容 |

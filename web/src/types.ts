@@ -14,7 +14,8 @@ export const SCENES = ['回家', '离家', '睡眠', '影院'] as const;
 export type SceneName = (typeof SCENES)[number];
 
 export type AlertLevel = '高' | '中' | '低';
-export type TripStatus = '进行中' | '即将开始';
+import type { TripDates, TripStatus } from '../../shared/trips';
+export type { TripStatus } from '../../shared/trips';
 
 export interface WardrobeItem {
   id: string;
@@ -25,6 +26,8 @@ export interface WardrobeItem {
   occasion: string;
   wears: number;
   createdAt: string;
+  cover?: string;
+  price?: number | null;
 }
 
 export interface Outfit {
@@ -84,7 +87,7 @@ export interface HomeLink {
   sceneBindings: Partial<Record<SceneName, string>>;
 }
 
-export interface ItineraryDraft {
+export interface ItineraryDraft extends TripDates {
   title: string;
   status: TripStatus;
   transport: string;
@@ -149,7 +152,7 @@ export interface TripNode {
   detail: string;
 }
 
-export interface Trip {
+export interface Trip extends TripDates {
   id: string;
   title: string;
   status: TripStatus;
@@ -182,13 +185,7 @@ export interface BillDraft extends BillIdentity {
   note: string;
 }
 
-export interface ClothingDraft {
-  name: string;
-  category: WardrobeCategory;
-  season: string;
-  color: string;
-  occasion: string;
-}
+export type ClothingDraft = Pick<WardrobeItem, 'name' | 'category' | 'season' | 'color' | 'occasion' | 'cover' | 'price'>;
 
 export interface Budgets {
   total: number;
