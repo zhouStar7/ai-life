@@ -1,11 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
+import { localDate } from '../localDate.js';
 import { readJson } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
 
 export async function buildContext(db: PrismaClient) {
   const snap = await readSnapshot(db);
-  const protein = snap.meals.reduce((sum, meal) => sum + meal.protein, 0);
-  const kcal = snap.meals.reduce((sum, meal) => sum + meal.kcal, 0);
+  const today = localDate();
+  const meals = snap.meals.filter((meal) => meal.date === today);
+  const protein = meals.reduce((sum, meal) => sum + meal.protein, 0);
+  const kcal = meals.reduce((sum, meal) => sum + meal.kcal, 0);
   const upcoming = snap.trips.find((trip) => trip.status === '即将开始') ?? snap.trips[0];
   const packing = upcoming?.packing ?? [];
   const openAlerts = snap.alerts.filter((alert) => !alert.handled).map((alert) => alert.title);

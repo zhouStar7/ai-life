@@ -1,10 +1,14 @@
+import { createHash } from 'node:crypto';
+import type { BillIdentity } from '../../../shared/bills.js';
+import { centsToYuan, yuanToCents } from '../money.js';
+import { isLocalDate } from '../localDate.js';
 import { extractJson } from '../json.js';
 import { complete, type ModelConfig } from './model.js';
 
 export const TAGS = ['衣', '食', '住', '行'] as const;
 export type SpendTag = (typeof TAGS)[number];
 
-export type BillDraft = {
+export type BillDraft = BillIdentity & {
   tag: SpendTag | null;
   amount: number;
   date: string;
@@ -19,8 +23,14 @@ const RULES: { tag: SpendTag; words: string[] }[] = [
   { tag: '食', words: ['餐', '外卖', '美团', '饿了么', '菜', '咖啡', '饭', '食', '超市', '星巴克', '买菜', '餐饮', '美食', '盒马', '面包'] },
 ];
 
-const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'direction' | 'tag' | 'kind'> = {
+const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'direction' | 'tag' | 'kind' | 'transactionId'> = {
   交易时间: 'date',
+  交易创建时间: 'date',
+  付款时间: 'date',
+  交易订单号: 'transactionId',
+  交易单号: 'transactionId',
+  交易号: 'transactionId',
+  transactionId: 'transactionId',
   日期: 'date',
   date: 'date',
   交易对方: 'merchant',
@@ -28,6 +38,7 @@ const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'directio
   对方: 'merchant',
   merchant: 'merchant',
   商品: 'note',
+  商品名称: 'note',
   商品说明: 'note',
   备注: 'note',
   note: 'note',
@@ -35,6 +46,7 @@ const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'directio
   '金额(元)': 'amount',
   amount: 'amount',
   '收/支': 'direction',
+  '收入/支出': 'direction',
   收支: 'direction',
   分类: 'tag',
   交易分类: 'kind',
@@ -42,7 +54,7 @@ const HEADER: Record<string, 'date' | 'merchant' | 'note' | 'amount' | 'directio
   tag: 'tag',
 };
 
-const PROMPT = '读这张账单截图，只返回 JSON：{"rows":[{"date":"2026-09-18","merchant":"","amount":1,"note":"","tag":"食","direction":"支出"}]}。tag 只能是衣、食、住、行。收入和退款不要放进行列。';
+const PROMPT = '读这张账单截图，只返回 JSON：{"rows":[{"date":"","merchant":"","amount":1,"note":"","tag":"食","direction":"支出"}]}。date 使用单据上可辨认的完整日期 YYYY-MM-DD，缺失或无法辨认时留空。金额以元为单位，保留分。tag 只能是衣、食、住、行。收入和退款不要放进行列。';
 
 export function isTag(value: unknown): value is SpendTag {
   return typeof value === 'string' && (TAGS as readonly string[]).includes(value);
@@ -65,7 +77,14 @@ export function parseCsv(csv: string): BillDraft[] {
     const draft = rowFromCells(cells, header.map);
     if (draft) rows.push(draft);
   }
-  return rows;
+  const headers = table[header.index];
+  const source = headers.includes('交易单号') ? 'wechat' : headers.some((key) => ['交易订单号', '交易号'].includes(key)) ? 'alipay' : 'csv';
+  return identifyRows(rows, csv, source);
+}
+
+function identifyRows(rows: BillDraft[], content: string, source: BillIdentity['source']) {
+  const fingerprint = createHash('sha256').update(content).digest('hex');
+  return rows.map((row, index) => ({ ...row, source, rowKey: `${fingerprint}:${index}` }));
 }
 
 export function billsFromModel(content: string): BillDraft[] {
@@ -107,7 +126,7 @@ export async function recognizeBill(config: ModelConfig, image: string) {
       ],
     },
   ]);
-  return billsFromModel(content);
+  return identifyRows(billsFromModel(content), image, 'image');
 }
 
 function parseTable(csv: string) {
@@ -158,7 +177,7 @@ function findHeader(table: string[][]) {
 
 function rowFromCells(cells: string[], map: Record<number, (typeof HEADER)[string]>): BillDraft | null {
   const picked: Partial<Record<(typeof HEADER)[string], string>> = {};
-  for (const [index, field] of Object.entries(map)) picked[field] = cells[Number(index)] ?? '';
+  for (const [index, field] of Object.entries(map)) if (cells[Number(index)]) picked[field] = cells[Number(index)];
   if (isIncome(picked.direction ?? '')) return null;
   const merchant = (picked.merchant || picked.note || '').trim();
   const note = (picked.note || '').trim();
@@ -166,6 +185,7 @@ function rowFromCells(cells: string[], map: Record<number, (typeof HEADER)[strin
   if (!merchant || amount <= 0) return null;
   const blob = `${merchant} ${note} ${picked.kind ?? ''} ${picked.tag ?? ''}`;
   return {
+    transactionId: picked.transactionId && !/^[/\-—]+$/.test(picked.transactionId) ? picked.transactionId : undefined,
     tag: asTag(picked.tag ?? '') ?? classifySpend(blob),
     amount,
     date: normalizeDate(picked.date ?? ''),
@@ -185,14 +205,15 @@ function isIncome(value: string) {
 }
 
 function normalizeAmount(value: unknown) {
-  const cleaned = String(value ?? '').replace(/[¥￥,\s+]/g, '');
-  const amount = Number(cleaned);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return Math.round(amount);
+  if (typeof value !== 'number' && typeof value !== 'string') return 0;
+  const text = String(value).trim().replace(/^[¥￥]\s*/, '').replace(/^\+/, '');
+  if (text.includes(',') && !/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(text)) return 0;
+  return centsToYuan(yuanToCents(text.replace(/,/g, '')) ?? 0n);
 }
 
 function normalizeDate(value: string) {
-  const match = value.match(/(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
-  if (!match) return '2026-09-22';
-  return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  const match = value.trim().match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日|(?=\s|T|$))/);
+  if (!match) return '';
+  const date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  return isLocalDate(date) ? date : '';
 }

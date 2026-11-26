@@ -1,13 +1,22 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { readJson } from '../ids.js';
-import { applyNamedScene, bindScene, syncHome, toggleDevice } from '../homeLink.js';
+import { bindScene, syncHome } from '../homeLink.js';
+import { homeActions, type HomeTarget } from '../homeActions.js';
 import { SEED_DEVICES } from '../seedData.js';
 import { readSnapshot } from '../snapshot.js';
 
 const SCENES = ['回家', '离家', '睡眠', '影院'];
 
 export function registerHome(app: Hono, db: PrismaClient) {
+  const run = homeActions(db);
+  async function control(c: Context, target: HomeTarget) {
+    const body = await c.req.json().catch(() => ({}));
+    const result = await run(target, body?.confirmation);
+    if (result.error) return c.json(result, 409);
+    if (result.preview) return c.json(result);
+    return c.json({ ...result, snapshot: await readSnapshot(db) });
+  }
   app.post('/api/devices/bind-sample', async (c) => {
     const existing = new Set((await db.device.findMany()).map((device) => device.id));
     const missing = SEED_DEVICES.filter((device) => !existing.has(device.id));
@@ -30,8 +39,7 @@ export function registerHome(app: Hono, db: PrismaClient) {
   });
 
   app.post('/api/devices/:id/toggle', async (c) => {
-    const error = await toggleDevice(db, c.req.param('id'));
-    return c.json({ snapshot: await readSnapshot(db), ...(error ? { error } : {}) });
+    return control(c, { device: c.req.param('id') });
   });
 
   app.delete('/api/devices/:id', async (c) => {
@@ -51,8 +59,7 @@ export function registerHome(app: Hono, db: PrismaClient) {
   app.post('/api/scenes/:name', async (c) => {
     const name = c.req.param('name');
     if (!SCENES.includes(name)) return c.json({ error: 'invalid' }, 400);
-    const scene = await applyNamedScene(db, name);
-    return c.json({ snapshot: await readSnapshot(db), scene });
+    return control(c, { scene: name });
   });
 
   app.post('/api/alerts/:id/handle', async (c) => {

@@ -40,11 +40,16 @@ media_player.speaker||客厅
 `;
 
 const calls: { url: string; body: string }[] = [];
+let fault: 'timeout' | 'reject' | undefined;
 const ha = createServer(async (req, res) => {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
   const body = Buffer.concat(chunks).toString();
   calls.push({ url: req.url || '', body });
+  if (fault && req.url?.startsWith('/api/services/') && body.includes('light.study')) {
+    if (fault === 'reject') { res.statusCode = 503; res.end(); }
+    return;
+  }
   if (req.url === '/api/states') {
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify(STATES));
@@ -89,6 +94,19 @@ async function json(pathname: string, init?: RequestInit) {
   return { status: response.status, body };
 }
 
+async function confirmed(path: string) {
+  const count = calls.length;
+  const { body } = await json(path, { method: 'POST' });
+  assert.ok(body.preview.token);
+  assert.equal(calls.length, count);
+  const init = { method: 'POST', body: JSON.stringify({ confirmation: body.preview.token }) };
+  const response = await json(path, init);
+  const after = calls.length;
+  assert.equal((await json(path, init)).status, 409);
+  assert.equal(calls.length, after);
+  return response;
+}
+
 test('areas replace name guesses and empty areas stay unzoned', () => {
   const areas = { 'light.study': '书房', 'light.spare': '' };
   const devices = mapDevices([
@@ -127,7 +145,7 @@ test('away and sleep move connected devices when no scene shares the name', asyn
   assert.equal(JSON.stringify(synced.body).includes('mock-token'), false);
 
   calls.length = 0;
-  const away = await json('/api/scenes/离家', { method: 'POST' });
+  const away = await confirmed('/api/scenes/离家');
   assert.equal(away.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url.includes('/api/services/scene/')), false);
   assert.equal(calls.some((call) => call.url === '/api/services/light/turn_off' && call.body.includes('light.study')), true);
@@ -139,7 +157,7 @@ test('away and sleep move connected devices when no scene shares the name', asyn
   assert.equal(away.body.snapshot.devices.find((item: { id: string }) => item.id === 'light.dead').offline, true);
 
   calls.length = 0;
-  const sleep = await json('/api/scenes/睡眠', { method: 'POST' });
+  const sleep = await confirmed('/api/scenes/睡眠');
   assert.equal(sleep.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url.includes('/api/services/scene/')), false);
   assert.equal(calls.some((call) => call.url === '/api/services/climate/turn_on' && call.body.includes('climate.bed')), true);
@@ -157,13 +175,13 @@ test('a scene binding calls that scene and device actions stay available', async
   assert.equal(devices.body.snapshot.home.sceneBindings.影院, 'devices');
 
   calls.length = 0;
-  const home = await json('/api/scenes/回家', { method: 'POST' });
+  const home = await confirmed('/api/scenes/回家');
   assert.equal(home.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url === '/api/services/scene/turn_on' && call.body.includes('scene.movie')), true);
   assert.equal(calls.some((call) => !call.url.includes('/scene/')), false);
 
   calls.length = 0;
-  const cinema = await json('/api/scenes/影院', { method: 'POST' });
+  const cinema = await confirmed('/api/scenes/影院');
   assert.equal(cinema.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url.includes('/api/services/scene/')), false);
 });
@@ -188,4 +206,21 @@ test('service calls follow the scene diff', () => {
   assert.deepEqual(serviceCalls(light, { ...light, on: false }), [{ domain: 'light', service: 'turn_off' }]);
   const curtain = { id: 'cover.curtain', name: '窗帘', room: '客厅', kind: '窗帘', on: true, paramLabel: '开合', paramValue: '40%', offline: false };
   assert.deepEqual(serviceCalls(curtain, { ...curtain, paramValue: '闭合' }), [{ domain: 'cover', service: 'close_cover' }]);
+});
+
+test('per-device failures and timeouts report the target and preserve its last known state', async () => {
+  await json('/api/home/sync', { method: 'POST' });
+  try {
+    fault = 'reject';
+    const partial = await confirmed('/api/scenes/离家');
+    assert.equal(partial.body.scene.status, 'partial');
+    assert.match(partial.body.scene.results.find((r: { id: string }) => r.id === 'light.study').error, /HTTP 503/);
+    assert.equal(partial.body.snapshot.devices.find((d: { id: string }) => d.id === 'light.study').on, true);
+    assert.equal(partial.body.snapshot.devices.find((d: { id: string }) => d.id === 'light.spare').on, false);
+    fault = 'timeout';
+    const timeout = await confirmed('/api/devices/light.study/toggle');
+    assert.equal(timeout.body.scene.status, 'failed');
+    assert.match(timeout.body.scene.results[0].error, /超时/);
+    assert.equal(timeout.body.snapshot.devices.find((d: { id: string }) => d.id === 'light.study').on, true);
+  } finally { fault = undefined; }
 });

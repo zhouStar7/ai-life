@@ -152,12 +152,20 @@ export function serviceFor(domain: string, turnOn: boolean) {
   return turnOn ? 'turn_on' : 'turn_off';
 }
 
+export function homeError(error: unknown) {
+  if (error instanceof Error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') return '请求超时，请同步设备核对状态';
+    if (/^HTTP \d{3}$/.test(error.message)) return error.message + (['HTTP 401', 'HTTP 403'].includes(error.message) ? '，请核对令牌权限' : '，请检查设备服务');
+  }
+  return '无法连接 Home Assistant，请核对地址与网络';
+}
+
 export async function fetchStates(base: string, token: string) {
   const response = await fetch(`${root(base)}/api/states`, {
     headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
     signal: AbortSignal.timeout(2000),
   });
-  if (!response.ok) throw new Error('home_unavailable');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const body = await response.json() as unknown;
   if (!Array.isArray(body)) throw new Error('home_unavailable');
   return body as HaEntity[];
@@ -180,7 +188,7 @@ export async function callService(
     body: JSON.stringify({ entity_id: entityId, ...data }),
     signal: AbortSignal.timeout(2000),
   });
-  if (!response.ok) throw new Error('home_unavailable');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
 function root(base: string) {

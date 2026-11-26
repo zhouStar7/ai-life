@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { estimateMeal, mealDate, pickRecipe, recipeTags } from '../dietPlan.js';
+import { isLocalDate, localDate } from '../localDate.js';
 import { uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
 
@@ -29,32 +30,47 @@ export function registerDiet(app: Hono, db: PrismaClient) {
 
   app.post('/api/meals', async (c) => {
     const body = await c.req.json();
+    if (body.date != null && !isLocalDate(body.date)) return c.json({ error: 'invalid date' }, 400);
     if (!body.name || !SLOTS.includes(body.slot)) return c.json({ error: 'invalid' }, 400);
-    await db.meal.create({
-      data: {
-        id: uid('m'),
-        slot: body.slot,
-        name: String(body.name).trim(),
-        time: body.time || '12:30',
-        date: mealDate(body.date),
-        kcal: Number(body.kcal) || 0,
-        protein: Number(body.protein) || 0,
-        carb: Number(body.carb) || 0,
-        fat: Number(body.fat) || 0,
-      },
-    });
+    const data = {
+      id: uid('m'),
+      slot: body.slot,
+      name: String(body.name).trim(),
+      time: body.time || '12:30',
+      date: mealDate(body.date),
+      kcal: Number(body.kcal) || 0,
+      protein: Number(body.protein) || 0,
+      carb: Number(body.carb) || 0,
+      fat: Number(body.fat) || 0,
+    };
+    if (body.shortcutDraftId === undefined) {
+      await db.meal.create({ data });
+    } else {
+      const id = body.shortcutDraftId;
+      if (typeof id !== 'string' || !data.name) return c.json({ error: 'invalid' }, 400);
+      const confirmed = await db.$transaction(async (tx) => {
+        const claimed = await tx.quickMealDraft.updateMany({ where: { id, status: 'pending' }, data: { status: 'saved' } });
+        if (claimed.count) {
+          await tx.meal.create({ data });
+          return true;
+        }
+        return (await tx.quickMealDraft.findUnique({ where: { id }, select: { status: true } }))?.status === 'saved';
+      });
+      if (!confirmed) return c.json({ error: 'missing' }, 404);
+    }
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
   app.patch('/api/meals/:id', async (c) => {
     const body = await c.req.json();
+    if (body.date !== undefined && !isLocalDate(body.date)) return c.json({ error: 'invalid date' }, 400);
     await db.meal.update({
       where: { id: c.req.param('id') },
       data: {
         slot: body.slot,
         name: body.name,
         time: body.time,
-        date: mealDate(body.date),
+        date: body.date,
         kcal: Number(body.kcal) || 0,
         protein: Number(body.protein) || 0,
         carb: Number(body.carb) || 0,
@@ -73,7 +89,8 @@ export function registerDiet(app: Hono, db: PrismaClient) {
 
   app.get('/api/diet/suggestion', async (c) => {
     const snap = await readSnapshot(db);
-    const recipe = pickRecipe(snap.recipes, snap.meals, snap.targets);
+    const date = mealDate(c.req.query('date'));
+    const recipe = pickRecipe(snap.recipes, snap.meals.filter((meal) => meal.date === date), snap.targets);
     return c.json({ recipe });
   });
 
@@ -98,6 +115,8 @@ export function registerDiet(app: Hono, db: PrismaClient) {
 
   app.post('/api/recipes/:id/apply', async (c) => {
     const recipe = await db.recipe.findUniqueOrThrow({ where: { id: c.req.param('id') } });
+    const body = await c.req.json().catch(() => ({}));
+    if (body.date != null && !isLocalDate(body.date)) return c.json({ error: 'invalid date' }, 400);
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     await db.meal.create({
@@ -106,7 +125,7 @@ export function registerDiet(app: Hono, db: PrismaClient) {
         slot: recipe.slot,
         name: recipe.name,
         time,
-        date: mealDate(undefined),
+        date: body.date ?? localDate(now),
         kcal: recipe.kcal,
         protein: recipe.protein,
         carb: recipe.carb,

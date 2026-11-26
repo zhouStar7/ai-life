@@ -1,4 +1,4 @@
-import { CROSS_ACTIONS, parseActions, ROUTES, type Action } from './actions.js';
+import { crossActions, parseActions, ROUTES, type Action } from './actions.js';
 import { intentHref, intentKey, routeIntent, type Intent } from './router.js';
 
 export type ArrangeResult = {
@@ -28,7 +28,7 @@ const DEFAULT_LINES: Record<Intent, string[]> = {
 export function fallbackPlan(text: string, adoptedTips: string[]): ArrangeResult {
   const intent = routeIntent(text);
   const key = intentKey(intent);
-  const actions = intent === 'cross' ? CROSS_ACTIONS : [];
+  const actions = intent === 'cross' ? crossActions() : [];
   return {
     key,
     title: intent === 'cross' ? '衣食住行支已经串在一起' : '今天可以这样安排',
@@ -44,7 +44,7 @@ export function planFromModel(text: string, content: string, adoptedTips: string
   const parsed = extract(content);
   const modelActions = parseActions(parsed?.actions);
   const actions = intent === 'cross'
-    ? (coversCross(modelActions) ? modelActions : CROSS_ACTIONS)
+    ? (coversCross(modelActions) ? modelActions : crossActions())
     : modelActions;
   const href = typeof parsed?.href === 'string' && ROUTES.includes(parsed.href) ? parsed.href : intentHref(intent);
   const lines = Array.isArray(parsed?.lines) ? parsed.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0) : [];

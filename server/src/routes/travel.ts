@@ -1,34 +1,27 @@
+import { isMonth } from '../../../shared/spending.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { complete } from '../adapters/model.js';
 import { draftFromModel, ITINERARY_MODEL_PROMPT, parseItinerary, type ItineraryDraft } from '../adapters/itinerary.js';
-import { applyNamedScene } from '../homeLink.js';
 import { readJson, uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
-import { applyTripAway } from '../tripAway.js';
+import { localDate } from '../localDate.js';
+import { centsToYuan, yuanToCents } from '../money.js';
+import { createHash } from 'node:crypto';
 import { destinationOf, mealReason, pickTravelOutfit, suggestTripMeal } from '../tripPlan.js';
 
 function packingItems(lines: string[]) {
   return lines.map((text) => ({ id: uid('p'), text, done: false }));
 }
 
-async function saveTrip(db: PrismaClient, draft: ItineraryDraft) {
-  const id = uid('trip');
-  await db.trip.create({
-    data: {
-      id,
-      title: draft.title,
-      status: draft.status,
-      transport: draft.transport,
-      dateLabel: draft.dateLabel,
-      tickets: JSON.stringify(draft.tickets),
-      timeline: JSON.stringify(draft.timeline),
-      packing: JSON.stringify(packingItems(draft.packing)),
-      prepAdopted: false,
-    },
-  });
-  await db.sessionState.update({ where: { id: 'local' }, data: { activeTripId: id } });
-  return id;
+function importId(key: string) {
+  return `trip-${createHash('sha256').update(key).digest('hex')}`;
+}
+
+async function previewTrip(db: PrismaClient, draft: ItineraryDraft, text: string, source: 'rules' | 'model') {
+  const id = importId(text.normalize('NFKC').replace(/\s+/g, ' ').trim());
+  const existingTrip = await db.trip.findUnique({ where: { id }, select: { id: true, title: true } });
+  return { draft: { ...draft, source, importId: id, existingTrip } };
 }
 
 export function registerTravel(app: Hono, db: PrismaClient) {
@@ -36,7 +29,7 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const body = await c.req.json();
     const text = String(body.text ?? '');
     const ruled = parseItinerary(text);
-    if (ruled) return c.json({ draft: { ...ruled, source: 'rules' } });
+    if (ruled) return c.json(await previewTrip(db, ruled, text, 'rules'));
     const profile = await db.profile.findUniqueOrThrow({ where: { id: 'local' } });
     if (!profile.modelBase) return c.json({ error: 'unreadable' }, 422);
     try {
@@ -49,7 +42,7 @@ export function registerTravel(app: Hono, db: PrismaClient) {
       );
       const drafted = draftFromModel(content);
       if (!drafted) return c.json({ error: 'unreadable' }, 422);
-      return c.json({ draft: { ...drafted, source: 'model' } });
+      return c.json(await previewTrip(db, drafted, text, 'model'));
     } catch {
       return c.json({ error: 'unreadable' }, 422);
     }
@@ -58,17 +51,22 @@ export function registerTravel(app: Hono, db: PrismaClient) {
   app.post('/api/trips/import', async (c) => {
     const body = await c.req.json();
     const draft = body.draft as ItineraryDraft | undefined;
-    if (!draft?.title || !Array.isArray(draft.timeline) || draft.timeline.length === 0) return c.json({ error: 'invalid' }, 400);
-    await saveTrip(db, {
-      title: String(draft.title).trim(),
-      status: '即将开始',
-      transport: draft.transport || '其他',
-      dateLabel: draft.dateLabel || '日期待定',
-      tickets: Array.isArray(draft.tickets) ? draft.tickets : [],
-      timeline: draft.timeline,
-      packing: Array.isArray(draft.packing) && draft.packing.length > 0 ? draft.packing : ['身份证', '充电器', '换洗衣物'],
+    if (!draft || typeof draft.title !== 'string' || !draft.title.trim() || !Array.isArray(draft.timeline) || !draft.timeline.length
+      || !draft.timeline.every(node => node && [node.time, node.title, node.detail].every(value => typeof value === 'string' && value.trim()))
+      || !Array.isArray(draft.tickets) || !draft.tickets.every(ticket => ticket && typeof ticket.label === 'string' && typeof ticket.status === 'string')
+      || !Array.isArray(draft.packing) || !draft.packing.every(text => typeof text === 'string')) return c.json({ error: 'invalid' }, 400);
+    const id = typeof body.draft.importId === 'string' && /^trip-[a-f0-9]{64}$/.test(body.draft.importId)
+      ? body.draft.importId : importId(JSON.stringify([draft.dateLabel, draft.tickets, draft.timeline]));
+    const duplicate = await db.$transaction(async tx => {
+      const exists = await tx.trip.findUnique({ where: { id }, select: { id: true } });
+      if (!exists) await tx.trip.create({ data: {
+        id, title: draft.title.trim(), status: '即将开始', transport: draft.transport || '其他', dateLabel: draft.dateLabel || '日期待定',
+        tickets: JSON.stringify(draft.tickets), timeline: JSON.stringify(draft.timeline), packing: JSON.stringify(packingItems(draft.packing.map(text => text.trim()).filter(Boolean))),
+      } });
+      await tx.sessionState.update({ where: { id: 'local' }, data: { activeTripId: id } });
+      return Boolean(exists);
     });
-    return c.json({ snapshot: await readSnapshot(db) });
+    return c.json({ snapshot: await readSnapshot(db), duplicate });
   });
 
   app.post('/api/trips/:id/chain', async (c) => {
@@ -79,12 +77,11 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const timeline = readJson<{ detail: string }[]>(trip.timeline, []);
     const destination = destinationOf(trip.title, timeline.map((node) => node.detail));
     const outfit = pickTravelOutfit(items, destination, session.weatherLabel, session.weatherOn);
-    if (outfit.itemIds.length > 0) {
-      await db.wardrobeItem.updateMany({ where: { id: { in: outfit.itemIds } }, data: { wears: { increment: 1 } } });
-    }
-    await db.sessionState.update({ where: { id: 'local' }, data: { outfitAdopted: true } });
-    const scene = await applyTripAway(db);
-    const meals = await db.meal.findMany();
+    const packing = readJson<{ text: string }[]>(trip.packing, []).map((item) => item.text);
+    const confirmation = prepKey(trip.id, outfit.itemIds, packing);
+    const scene = { name: '离家', via: session.haConnected ? 'home-assistant' : 'local' };
+    const date = localDate();
+    const meals = await db.meal.findMany({ where: { date } });
     const recipes = await db.recipe.findMany();
     const meal = suggestTripMeal(recipes.map((recipe) => ({
       slot: recipe.slot,
@@ -94,22 +91,23 @@ export function registerTravel(app: Hono, db: PrismaClient) {
       carb: recipe.carb,
       fat: recipe.fat,
     })), meals.map((item) => item.name));
-    const snapshot = await readSnapshot(db);
-    const tripSpend = snapshot.expenses
-      .filter((item) => item.tripId === trip.id && item.tag === '行')
-      .reduce((sum, item) => sum + item.amount, 0);
+    const month = c.req.query('month');
+    if (month !== undefined && !isMonth(month)) return c.json({ error: 'invalid' }, 400);
+    const snapshot = await readSnapshot(db, month);
+    const tripSpend = await db.expense.aggregate({ where: { tripId: trip.id, tag: '行' }, _sum: { amountCents: true } });
     return c.json({
       snapshot,
       chain: {
         trip: { id: trip.id, title: trip.title },
-        outfit,
+        outfit, packing, confirmation,
         scene,
         meal: { ...meal, reason: mealReason(meal, destination) },
         budget: {
+          month: snapshot.spending.month,
           spent: snapshot.spending.byTag.行,
           budget: snapshot.budgets.行,
-          remain: snapshot.budgets.行 - snapshot.spending.byTag.行,
-          trip: tripSpend,
+          remain: Math.round((snapshot.budgets.行 - snapshot.spending.byTag.行) * 100) / 100,
+          trip: centsToYuan(tripSpend._sum.amountCents ?? 0n),
         },
       },
     });
@@ -120,7 +118,8 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     if (!trip) return c.json({ error: 'missing' }, 404);
     const body = await c.req.json().catch(() => ({} as { name?: unknown }));
     const recipes = await db.recipe.findMany();
-    const meals = await db.meal.findMany();
+    const date = localDate();
+    const meals = await db.meal.findMany({ where: { date } });
     const suggested = suggestTripMeal(recipes.map((recipe) => ({
       slot: recipe.slot,
       name: recipe.name,
@@ -132,7 +131,7 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const recipe = recipes.find((item) => item.name === (typeof body.name === 'string' ? body.name.trim() : ''))
       ?? recipes.find((item) => item.name === suggested.name);
     if (!recipe) return c.json({ error: 'missing' }, 404);
-    const exists = await db.meal.findFirst({ where: { name: recipe.name } });
+    const exists = await db.meal.findFirst({ where: { name: recipe.name, date } });
     if (!exists) {
       await db.meal.create({
         data: {
@@ -140,6 +139,7 @@ export function registerTravel(app: Hono, db: PrismaClient) {
           slot: recipe.slot,
           name: recipe.name,
           time: '12:30',
+          date,
           kcal: recipe.kcal,
           protein: recipe.protein,
           carb: recipe.carb,
@@ -199,6 +199,24 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     return c.json({ snapshot: await readSnapshot(db) });
   });
 
+  app.patch('/api/trips/:id/packing/:packId', async c => {
+    const body = await c.req.json();
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!text) return c.json({ error: 'invalid' }, 400);
+    const changed = await db.$transaction(async tx => {
+      const trip = await tx.trip.findUnique({ where: { id: c.req.param('id') } });
+      if (!trip) return false;
+      const items = readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []);
+      const item = items.find(item => item.id === c.req.param('packId'));
+      if (!item) return false;
+      item.text = text;
+      await tx.trip.update({ where: { id: trip.id }, data: { packing: JSON.stringify(items) } });
+      return true;
+    });
+    if (!changed) return c.json({ error: 'missing' }, 404);
+    return c.json({ snapshot: await readSnapshot(db) });
+  });
+
   app.post('/api/packing-templates', async (c) => {
     const body = await c.req.json().catch(() => ({} as { name?: unknown; tripId?: unknown }));
     const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -231,16 +249,16 @@ export function registerTravel(app: Hono, db: PrismaClient) {
     const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
     if (!trip) return c.json({ error: 'missing' }, 404);
     const body = await c.req.json().catch(() => ({} as { amount?: unknown; merchant?: unknown; kind?: unknown }));
-    const amount = Math.round(Number(body.amount));
+    const amountCents = yuanToCents(body.amount);
     const kind = body.kind === '食宿' ? '食宿' : body.kind === '票务' ? '票务' : '';
     const merchant = typeof body.merchant === 'string' ? body.merchant.trim() : '';
-    if (!kind || !merchant || !Number.isFinite(amount) || amount <= 0) return c.json({ error: 'invalid' }, 400);
+    if (!kind || !merchant || !amountCents) return c.json({ error: 'invalid' }, 400);
     await db.expense.create({
       data: {
         id: uid('e'),
         tag: '行',
-        amount,
-        date: '2026-09-22',
+        amountCents,
+        date: localDate(),
         merchant,
         note: kind,
         tripId: trip.id,
@@ -259,13 +277,28 @@ export function registerTravel(app: Hono, db: PrismaClient) {
 
   app.post('/api/trips/:id/adopt-prep', async (c) => {
     const trip = await db.trip.findUnique({ where: { id: c.req.param('id') } });
-    if (!trip || trip.prepAdopted) return c.json({ snapshot: await readSnapshot(db) });
-    await db.trip.update({ where: { id: trip.id }, data: { prepAdopted: true } });
-    await applyNamedScene(db, '离家');
+    if (!trip) return c.json({ error: 'missing' }, 404);
+    if (trip.prepAdopted) return c.json({ snapshot: await readSnapshot(db) });
+    const body = await c.req.json().catch(() => ({}));
     const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-    const tips = readJson<string[]>(session.adoptedTips, []);
-    if (!tips.includes('prep')) tips.push('prep');
-    await db.sessionState.update({ where: { id: 'local' }, data: { adoptedTips: JSON.stringify(tips) } });
+    const timeline = readJson<{ detail: string }[]>(trip.timeline, []);
+    const destination = destinationOf(trip.title, timeline.map((node) => node.detail));
+    const outfit = pickTravelOutfit(await db.wardrobeItem.findMany(), destination, session.weatherLabel, session.weatherOn);
+    const packing = readJson<{ text: string }[]>(trip.packing, []).map((item) => item.text);
+    if (body.confirmation !== prepKey(trip.id, outfit.itemIds, packing)) return c.json({ error: '请重新预览准备包' }, 409);
+    await db.$transaction(async (tx) => {
+      const claimed = await tx.trip.updateMany({ where: { id: trip.id, prepAdopted: false }, data: { prepAdopted: true } });
+      if (!claimed.count) return;
+      await tx.wardrobeItem.updateMany({ where: { id: { in: outfit.itemIds } }, data: { wears: { increment: 1 } } });
+      const current = await tx.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
+      const tips = new Set(readJson<string[]>(current.adoptedTips, []));
+      tips.add('prep');
+      await tx.sessionState.update({ where: { id: 'local' }, data: { adoptedTips: JSON.stringify([...tips]), outfitAdopted: outfit.itemIds.length > 0 || current.outfitAdopted } });
+    });
     return c.json({ snapshot: await readSnapshot(db) });
   });
+}
+
+function prepKey(id: string, outfit: string[], packing: string[]) {
+  return createHash('sha256').update(JSON.stringify([id, outfit, packing])).digest('hex');
 }

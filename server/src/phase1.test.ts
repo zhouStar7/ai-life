@@ -90,12 +90,13 @@ test('model plan adopts outfit, meal, away scene, packing and travel expense onc
     assert.equal(arranged.body.title, '模型方案');
     assert.equal(arranged.body.key, 'cross');
     assert.equal(arranged.body.actions.length, 6);
+    const before = await json('/api/snapshot');
     const adopted = await json('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: arranged.body.key, actions: arranged.body.actions }) });
     const snap = adopted.body.snapshot;
     assert.equal(snap.items.find((item: { id: string }) => item.id === 'w3').wears, 7);
     assert.ok(snap.meals.some((meal: { name: string }) => meal.name === '鸡胸温蔬藜麦'));
-    assert.equal(snap.activeScene, '离家');
-    assert.equal(snap.devices.find((device: { id: string }) => device.id === 'd1').on, false);
+    assert.equal(snap.activeScene, before.body.activeScene);
+    assert.deepEqual(snap.devices, before.body.devices);
     assert.equal(snap.devices.find((device: { id: string }) => device.id === 'd7').offline, true);
     const trip = snap.trips.find((item: { id: string }) => item.id === 't-bj');
     assert.ok(trip.packing.some((item: { text: string }) => item.text === '防风风衣'));
@@ -108,6 +109,29 @@ test('model plan adopts outfit, meal, away scene, packing and travel expense onc
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('weather refresh records the city, source and last successful update', async () => {
+  const original = globalThis.fetch;
+  let failed = false;
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.hostname !== 'api.open-meteo.com') return original(input, init);
+    assert.equal(url.searchParams.get('latitude'), '31.23');
+    return Response.json(failed ? {} : { current: { temperature_2m: 9.5, weather_code: 61 } });
+  };
+  try {
+    const refresh = () => json('/api/weather/refresh', { method: 'POST', body: JSON.stringify({ city: '上海' }) });
+    const first = (await refresh()).body.snapshot;
+    assert.equal(first.weatherLabel, '9.5°C 雨');
+    assert.equal(first.weatherCity, '上海');
+    assert.equal(first.weatherSource, 'Open-Meteo');
+    assert.ok(Date.parse(first.weatherUpdatedAt));
+    failed = true;
+    const second = (await refresh()).body.snapshot;
+    assert.equal(second.weatherOn, false);
+    assert.equal(second.weatherUpdatedAt, first.weatherUpdatedAt);
+  } finally { globalThis.fetch = original; }
 });
 
 test('weather failure turns the outfit reason back to occasion', async () => {

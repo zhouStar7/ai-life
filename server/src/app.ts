@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { PrismaClient } from '@prisma/client';
 import { registerAgent } from './routes/agent.js';
 import { registerDiet } from './routes/diet.js';
+import { registerQuickMeal } from './routes/quickMeal.js';
 import { registerHome } from './routes/home.js';
 import { registerSearch } from './routes/search.js';
 import { registerSettings } from './routes/settings.js';
@@ -10,7 +11,7 @@ import { registerSpending } from './routes/spending.js';
 import { registerTravel } from './routes/travel.js';
 import { registerWardrobe } from './routes/wardrobe.js';
 
-export function createApp(db: PrismaClient) {
+export function createApp(db: PrismaClient, options: { shortcutToken?: string } = {}) {
   const app = new Hono();
   app.onError((error, c) => {
     console.error(error);
@@ -19,6 +20,7 @@ export function createApp(db: PrismaClient) {
   registerSnapshot(app, db);
   registerWardrobe(app, db);
   registerDiet(app, db);
+  registerQuickMeal(app, db, options.shortcutToken);
   registerHome(app, db);
   registerTravel(app, db);
   registerSpending(app, db);

@@ -1,10 +1,11 @@
+import { yuanToCents } from '../money.js';
 import type { PrismaClient } from '@prisma/client';
 import { readJson, uid } from '../ids.js';
-import { nextDevice } from '../scenes.js';
 import { readSnapshot } from '../snapshot.js';
+import { localDate } from '../localDate.js';
 import { pickRecipe } from '../dietPlan.js';
 import { planOutfit } from '../wardrobePlan.js';
-import { CROSS_ACTIONS, type Action } from './actions.js';
+import { crossActions, type Action } from './actions.js';
 
 function withTip(tips: string[], id: string) {
   return tips.includes(id) ? tips : [...tips, id];
@@ -13,12 +14,11 @@ function withTip(tips: string[], id: string) {
 export async function adopt(db: PrismaClient, key: string | undefined, actions: Action[]) {
   const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
   let tips = readJson<string[]>(session.adoptedTips, []);
-  const batch = actions.length > 0 ? actions : key === 'cross' ? CROSS_ACTIONS : await preset(db, key, session);
+  const batch = actions.length > 0 ? actions : key === 'cross' ? crossActions() : await preset(db, key, session);
   if (key && tips.includes(key)) return readSnapshot(db);
   if (key === 'outfit' && session.outfitAdopted) return readSnapshot(db);
 
   let outfitAdopted = session.outfitAdopted;
-  let activeScene = session.activeScene;
   let activeTripId = session.activeTripId;
   let suggestionIndex = session.suggestionIndex;
   let weatherOn = session.weatherOn;
@@ -31,7 +31,8 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
       tips = withTip(tips, 'outfit');
     } else if (action.type === 'add_meal') {
       const id = action.id ?? uid('m');
-      const exists = await db.meal.findFirst({ where: { OR: [{ id }, { name: action.name }] } });
+      const date = localDate();
+      const exists = await db.meal.findFirst({ where: { OR: [{ id }, { name: action.name, date }] } });
       if (!exists) {
         await db.meal.create({
           data: {
@@ -39,7 +40,7 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
             slot: action.slot,
             name: action.name,
             time: action.time,
-            date: '2026-09-22',
+            date,
             kcal: action.kcal,
             protein: action.protein,
             carb: action.carb,
@@ -48,16 +49,6 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
         });
       }
       if (key === 'protein' || key === 'cross' || action.name.includes('鸡胸')) tips = withTip(tips, 'protein');
-    } else if (action.type === 'apply_scene') {
-      const devices = await db.device.findMany();
-      for (const device of devices) {
-        const next = nextDevice(device, action.name);
-        if (next.on !== device.on || next.paramValue !== device.paramValue) {
-          await db.device.update({ where: { id: device.id }, data: { on: next.on, paramValue: next.paramValue } });
-        }
-      }
-      activeScene = action.name;
-      if (action.name === '离家') tips = withTip(tips, 'prep');
     } else if (action.type === 'append_packing') {
       const trip = await db.trip.findUnique({ where: { id: action.tripId } });
       if (!trip) continue;
@@ -70,11 +61,13 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
       activeTripId = trip.id;
       tips = withTip(tips, 'prep');
     } else if (action.type === 'add_expense') {
+      const amountCents = yuanToCents(action.amount);
+      if (!amountCents) throw new Error('Invalid expense amount');
       const id = action.id ?? uid('e');
       const exists = await db.expense.findUnique({ where: { id } });
       if (!exists) {
         await db.expense.create({
-          data: { id, tag: action.tag, amount: action.amount, date: action.date, merchant: action.merchant, note: action.note },
+          data: { id, tag: action.tag, amountCents, date: action.date, merchant: action.merchant, note: action.note },
         });
       }
     } else if (action.type === 'handle_alert') {
@@ -95,7 +88,7 @@ export async function adopt(db: PrismaClient, key: string | undefined, actions: 
 
   await db.sessionState.update({
     where: { id: 'local' },
-    data: { adoptedTips: JSON.stringify(tips), outfitAdopted, activeScene, activeTripId, suggestionIndex, weatherOn },
+    data: { adoptedTips: JSON.stringify(tips), outfitAdopted, activeTripId, suggestionIndex, weatherOn },
   });
   return readSnapshot(db);
 }
@@ -108,7 +101,7 @@ async function preset(db: PrismaClient, key: string | undefined, session: { sugg
   if (key === 'protein') {
     const [recipes, meals, target] = await Promise.all([
       db.recipe.findMany(),
-      db.meal.findMany(),
+      db.meal.findMany({ where: { date: localDate() } }),
       db.nutritionTarget.findUniqueOrThrow({ where: { id: 'local' } }),
     ]);
     const picked = pickRecipe(recipes, meals, target);

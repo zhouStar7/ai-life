@@ -12,22 +12,23 @@ export function HomePage() {
   const openAlerts = store.alerts.filter((alert) => !alert.handled);
   const abnormal = openAlerts.some((alert) => alert.level === '高') || store.devices.some((device) => device.offline);
 
+  const source = store.source === 'cached' ? '本机缓存 · 等待连接' : store.home.configured ? (store.home.connected ? 'Home Assistant 已连接' : 'Home Assistant 未连接 · 上次同步状态') : store.devices.length || store.demoMode ? '演示设备' : '尚未配置 Home Assistant';
   return (
     <>
       <header className="page-head">
         <div>
           <h1 className="display" style={{ fontSize: 32 }}>家居</h1>
-          <p className="muted">{store.home.connected ? 'Home Assistant 已连接' : '未连接 · 演示数据'} · {online} 台在线 · {store.devices.length - online} 台离线{store.activeScene ? ` · 当前场景 ${store.activeScene}` : ''}</p>
+          <p className="muted">{source} · {online} 台在线 · {store.devices.length - online} 台离线{store.activeScene ? ` · 当前场景 ${store.activeScene}` : ''}</p>
         </div>
         <div className="row-actions">
           <button type="button" className="btn-ghost" onClick={() => { void store.syncHome(); }}>同步设备</button>
-          <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : '家里状态正常'}</span>
+          <span className="muted"><i className={abnormal ? 'dot warn' : 'dot'} />{abnormal ? '有设备需要看一眼' : (store.devices.length ? '没有设备提醒' : '暂无设备')}</span>
         </div>
       </header>
-      {store.devices.length === 0 ? (
+      {store.devices.length === 0 && !store.home.sceneCatalog.length ? (
         <div className="stack">
           <div className="card">
-            <Empty title="还没有绑定设备" desc={store.home.connected ? 'Home Assistant 里没有可显示的灯、空调、窗帘或电视。' : '未连接时仍用演示数据。'} action={store.home.connected ? undefined : <button type="button" className="btn" onClick={store.bindSampleDevices}>绑定演示设备</button>} />
+            <Empty title="还没有绑定设备" desc={store.home.connected ? 'Home Assistant 里没有可显示的灯、空调、窗帘或电视。' : '请在设置中保存家居连接并同步设备。'} action={store.home.configured || !store.demoMode ? undefined : <button type="button" className="btn" onClick={store.bindSampleDevices}>绑定演示设备</button>} />
           </div>
           <SpendCard tag="住" label="本月住家支出" />
         </div>

@@ -23,7 +23,38 @@ export function parseItinerary(text: string): ItineraryDraft | null {
   const flightMail = source.match(/航班\s*([A-Z]{2}\d{3,4})[\s\S]*?出发[:：]\s*(\d{4})-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)[\s\S]*?到达[:：]\s*\d{4}-(\d{2})-(\d{2})\s*(\d{1,2}:\d{2})\s*(\S+)/);
   const train = source.match(/(\d{1,2})月(\d{1,2})日\s*([GDC]\d{2,5})\s*([^\s，,。]{2,20}?)\s*(\d{1,2}:\d{2})\s*(?:开|出发)[，,\s]*(\d{1,2}:\d{2})\s*(?:到|抵达)\s*([^\s，,。]{2,20})/);
 
-  if (flight) {
+  const railNotice = source.match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}:\d{2})\s*([\p{Script=Han}]{2,16}?)站?开\s*([GDCZTK]\d{1,5})次[^。\n]{0,40}?[（(，,]\s*([\p{Script=Han}]{2,16}?)(?:至|到|[—-])([\p{Script=Han}]{2,16}?)(?:[）)，,。\s]|$)/u);
+  const mailCode = source.match(/航班(?:号|编号)?\s*[:：]?\s*([A-Z0-9]{2}\d{3,4})/i);
+  const mailStop = (field: string) => source.match(new RegExp(`(?:${field})[:：]\\s*(\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})[ \\t]+(\\d{1,2}:\\d{2})[ \\t]+([^\\n，,。]+)`));
+  const departure = mailStop('起飞时间|起飞|出发时间|出发');
+  const arrival = mailStop('抵达时间|抵达|到达时间|到达');
+  const railTicket = source.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*(\d{1,2}:\d{2})\s*([\p{Script=Han}]{2,16}?)(?:至|到)([\p{Script=Han}]{2,16}?)\s*([GDCZTK]\d{1,5})次/u);
+  if (railTicket) {
+    const [, year, month, day, depart, from, to, code] = railTicket;
+    const date = `${year ? `${year}年` : ''}${labelDay(month, day)}`;
+    transport = /^[GDC]/.test(code) ? '高铁' : '火车';
+    destination = city(to);
+    days.push(date);
+    tickets.push({ label: code, status: '已出票' });
+    timeline.push({ time: `${date} ${depart}`, title: '出发', detail: from }, { time: '待确认', title: '抵达', detail: to });
+  } else if (mailCode && departure && arrival && !flightMail) {
+    transport = '飞机';
+    destination = city(arrival[3].trim());
+    tickets.push({ label: mailCode[1].toUpperCase(), status: '已出票' });
+    for (const [title, stop] of [['出发', departure], ['抵达', arrival]] as const) {
+      const date = stop[1].replaceAll('/', '-');
+      days.push(date);
+      timeline.push({ time: `${date} ${stop[2]}`, title, detail: stop[3].trim() });
+    }
+  } else if (railNotice) {
+    const [, month, day, depart, from, code, , to] = railNotice;
+    transport = /^[GDC]/.test(code) ? '高铁' : '火车';
+    destination = city(to);
+    days.push(labelDay(month, day));
+    tickets.push({ label: code, status: '已出票' });
+    timeline.push({ time: clock(month, day, depart), title: '出发', detail: from });
+    timeline.push({ time: '待确认', title: '抵达', detail: to });
+  } else if (flight) {
     const [, month, day, code, from, depart, arrive, to] = flight;
     transport = '飞机';
     destination = city(to);

@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server';
 import { PrismaClient } from '@prisma/client';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { isLocalDate, localDate } from './localDate.js';
 import { createApp } from './app.js';
 import { estimateMeal, pickRecipe, weekFromMeals } from './dietPlan.js';
 import { SEED_MEALS, SEED_RECIPES } from './seedData.js';
@@ -84,16 +85,17 @@ test('recipe suggestion follows calorie and protein gaps', () => {
 });
 
 test('seven day intake uses stored meals', () => {
-  const week = weekFromMeals(SEED_MEALS);
+  const week = weekFromMeals(SEED_MEALS, '2026-09-22');
   assert.deepEqual(week.map((day) => day.label), ['16', '17', '18', '19', '20', '21', '22']);
   assert.deepEqual(week.slice(0, 6).map((day) => day.kcal), [0, 0, 0, 0, 0, 0]);
   assert.equal(week[6].kcal, 980);
-  const withYesterday = weekFromMeals([...SEED_MEALS, { date: '2026-09-21', kcal: 100, protein: 0, carb: 0, fat: 0 }]);
+  const withYesterday = weekFromMeals([...SEED_MEALS, { date: '2026-09-21', kcal: 100, protein: 0, carb: 0, fat: 0 }], '2026-09-22');
   assert.equal(withYesterday[5].kcal, 100);
   assert.equal(withYesterday[6].kcal, 980);
 });
 
-test('estimate, confirm, dated meal and custom recipe stay on the books', async () => {
+test('estimate, confirm, dated meal and custom recipe stay on the books', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 8, 22, 14) });
   const estimate = await json('/api/meals/estimate', { method: 'POST', body: JSON.stringify({ text: '中午一碗牛肉面' }) });
   assert.equal(estimate.status, 200);
   assert.equal(estimate.body.draft.kcal, 550);
@@ -128,4 +130,59 @@ test('estimate, confirm, dated meal and custom recipe stay on the books', async 
   const adopted = await json('/api/agent/adopt', { method: 'POST', body: JSON.stringify({ key: 'protein' }) });
   assert.equal(adopted.status, 200);
   assert.ok(adopted.body.snapshot.meals.some((meal: { name: string }) => meal.name === '高蛋白鸡胸'));
+});
+
+
+test('local midnight advances the default day and week across months, with dates preserved on readback', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2028, 1, 29, 23, 59, 59, 999) });
+  const post = (route: string, body: object) => json(route, { method: 'POST', body: JSON.stringify(body) });
+  const meal = { name: '月末餐', slot: '晚餐', kcal: 123 };
+  assert.equal(localDate(), '2028-02-29');
+  assert.equal(isLocalDate('2028-02-30'), false);
+  assert.equal((await post('/api/meals', meal)).status, 200);
+  const item = { name: '月末外套', category: '外套', color: '白' };
+  assert.equal((await post('/api/items', item)).status, 200);
+  t.mock.timers.tick(1);
+  assert.equal(localDate(), '2028-03-01');
+  assert.equal(estimateMeal('牛肉面').date, '2028-03-01');
+  assert.equal((await post('/api/items/batch', { items: [{ ...item, name: '月初外套' }] })).status, 200);
+  assert.equal((await post('/api/meals', { ...meal, name: '月初餐', kcal: 234 })).status, 200);
+  assert.equal((await post('/api/recipes/r1/apply', { date: '2028-02-26' })).status, 200);
+  const { body: snapshot } = await json('/api/snapshot');
+  const week = weekFromMeals(snapshot.meals);
+  assert.deepEqual(week.map(day => day.date), ['2028-02-24', '2028-02-25', '2028-02-26', '2028-02-27', '2028-02-28', '2028-02-29', '2028-03-01']);
+  assert.deepEqual(week.slice(-2).map(day => day.kcal), [123, 234]);
+  assert.ok(week[2].kcal > 0);
+  assert.equal(snapshot.items.find((row: { name: string }) => row.name === '月末外套').createdAt, '2028-02-29');
+  assert.equal(snapshot.items.find((row: { name: string }) => row.name === '月初外套').createdAt, '2028-03-01');
+});
+
+test('shortcut authorization is revocable and confirmation commits exactly one meal', async () => {
+  const token = 'example-shortcut-key-123456789000';
+  const enabled = createApp(db, { shortcutToken: token });
+  const path = '/api/shortcuts/meal-drafts';
+  const init = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'idempotency-key': 'meal-draft-retry-test' },
+    body: JSON.stringify({ text: '午餐一碗番茄面', date: '2028-02-28' }),
+  };
+  assert.equal((await createApp(db).request(path, init)).status, 404);
+  assert.equal((await createApp(db, { shortcutToken: 'replacement-shortcut-key-123456789' }).request(path, init)).status, 401);
+  const responses = await Promise.all([enabled.request(path, init), enabled.request(path, init)]);
+  const [draft, retry] = await Promise.all(responses.map((response) => response.json()));
+  assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+  assert.deepEqual(draft, retry);
+  assert.equal(draft.status, 'pending');
+  assert.equal(await db.meal.count({ where: { name: '快捷番茄面' } }), 0);
+  assert.equal((await enabled.request(path, { ...init, body: JSON.stringify({ text: '另一餐' }) })).status, 409);
+
+  const confirm = () => enabled.request('/api/meals', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: '快捷番茄面', slot: '午餐', date: '2028-02-28', shortcutDraftId: draft.id }),
+  });
+  const confirmed = await Promise.all([confirm(), confirm()]);
+  assert.deepEqual(confirmed.map((response) => response.status), [200, 200]);
+  assert.equal(await db.meal.count({ where: { name: '快捷番茄面' } }), 1);
+  assert.deepEqual(await (await enabled.request(path, init)).json(), { id: draft.id, status: 'saved' });
 });

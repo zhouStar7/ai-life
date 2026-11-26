@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Hono } from 'hono';
 import { recognizeClothing } from '../adapters/vision.js';
+import { isLocalDate, localDate } from '../localDate.js';
 import { uid } from '../ids.js';
 import { readSnapshot } from '../snapshot.js';
 import { blankDraft, draftsFromOrder, planOutfit } from '../wardrobePlan.js';
@@ -50,7 +51,7 @@ export function registerWardrobe(app: Hono, db: PrismaClient) {
     if (!validItem(body)) return c.json({ error: 'invalid' }, 400);
     const data = itemData(body);
     await db.wardrobeItem.create({
-      data: { id: uid('w'), ...data, category: data.category!, wears: 0, createdAt: '2026-09-22' },
+      data: { id: uid('w'), ...data, category: data.category!, wears: 0, createdAt: isLocalDate(body.createdAt) ? body.createdAt : localDate() },
     });
     return c.json({ snapshot: await readSnapshot(db) });
   });
@@ -62,7 +63,7 @@ export function registerWardrobe(app: Hono, db: PrismaClient) {
     await db.$transaction(items.map((item) => {
       const data = itemData(item);
       return db.wardrobeItem.create({
-        data: { id: uid('w'), ...data, category: data.category!, wears: 0, createdAt: '2026-09-22' },
+        data: { id: uid('w'), ...data, category: data.category!, wears: 0, createdAt: isLocalDate(body.createdAt) ? body.createdAt : localDate() },
       });
     }));
     return c.json({ snapshot: await readSnapshot(db) });
@@ -158,7 +159,7 @@ export function registerWardrobe(app: Hono, db: PrismaClient) {
     const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
     await db.sessionState.update({
       where: { id: 'local' },
-      data: { weatherOn: !session.weatherOn, weatherLabel: session.weatherOn ? '天气未知' : '22°C 多云', suggestionIndex: 0, outfitAdopted: false },
+      data: { weatherOn: !session.weatherOn && Boolean(session.weatherLabel && session.weatherLabel !== '天气未知'), suggestionIndex: 0, outfitAdopted: false },
     });
     return c.json({ snapshot: await readSnapshot(db) });
   });

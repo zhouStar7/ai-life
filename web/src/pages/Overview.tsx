@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { DIET_TODAY, pickRecipe } from '../dietPlan';
+import { useLocalDate } from '../localDate';
+import { pickRecipe } from '../dietPlan';
 import { monthExpenses, share, sumAmount, yuan } from '../format';
 import { useStore } from '../store';
 import { SPEND_TAGS } from '../types';
@@ -9,7 +10,8 @@ export function OverviewPage() {
   const month = monthExpenses(store.expenses);
   const total = sumAmount(month);
   const left = store.budgets.total - total;
-  const todayMeals = store.meals.filter((meal) => (meal.date || DIET_TODAY) === DIET_TODAY);
+  const today = useLocalDate();
+  const todayMeals = store.meals.filter((meal) => meal.date === today);
   const protein = todayMeals.reduce((sum, meal) => sum + meal.protein, 0);
   const kcal = todayMeals.reduce((sum, meal) => sum + meal.kcal, 0);
   const proteinGap = Math.max(0, store.targets.protein - protein);
@@ -27,14 +29,14 @@ export function OverviewPage() {
       title: store.weatherOn ? `今天 ${store.weatherLabel}，有一套通勤穿搭` : '天气暂时拿不到，先按通勤场合穿',
       detail: store.suggestion.title,
       done: store.adoptedTips.includes('outfit') || store.outfitAdopted,
-      action: () => { store.adoptOutfitSuggestion(); navigate('/wardrobe'); },
+      action: async () => { if (await store.adoptOutfitSuggestion()) navigate('/wardrobe'); },
     },
     {
       id: 'protein',
       title: mealPick ? `还可以补一顿${mealPick.slot}` : '今日热量和蛋白质已达标',
       detail: mealPick ? `热量还剩 ${kcalGap} kcal，蛋白质还差 ${proteinGap} g，可以加一份${mealPick.name}。` : '三餐结构已经够用。',
       done: !mealPick,
-      action: () => { if (mealPick) store.applyRecipe(mealPick.id); navigate('/diet'); },
+      action: async () => { if (mealPick && await store.applyRecipe(mealPick.id)) navigate('/diet'); },
     },
     ...(store.home.connected
       ? (liveAlerts.length > 0 ? [{
@@ -42,21 +44,21 @@ export function OverviewPage() {
         title: liveAlerts.length > 1 ? `${liveAlerts.length} 项家居异常` : liveAlerts[0].title,
         detail: liveAlerts.map((alert) => alert.title).join('、'),
         done: false,
-        action: () => { store.dismissHomeAlerts(); navigate('/home'); },
+        action: async () => { if (await store.dismissHomeAlerts()) navigate('/home'); },
       }] : [])
       : [{
         id: 'filter',
         title: filterAlert?.title ?? '净水器滤芯该换了',
         detail: filterAlert?.detail ?? '处理前可以先比价。',
         done: store.adoptedTips.includes('filter') || filterAlert?.handled === true,
-        action: () => { store.adoptFilterTip(); navigate('/home'); },
+        action: async () => { if (await store.adoptFilterTip()) navigate('/home'); },
       }]),
     {
       id: 'prep',
       title: upcoming ? `${upcoming.title}出发前记得离家` : '最近没有待出发的行程',
-      detail: '准备包会带上穿搭、关家电和行李清单。',
+      detail: '查看准备包，离家动作单独确认。',
       done: store.adoptedTips.includes('prep') || !upcoming || upcoming.prepAdopted,
-      action: () => { if (upcoming) store.adoptPrep(upcoming.id); navigate('/travel'); },
+      action: async () => { if (upcoming && await store.selectTrip(upcoming.id)) navigate('/travel'); },
     },
   ];
 

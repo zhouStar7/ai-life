@@ -1,3 +1,6 @@
+import { localDate, isLocalDate } from '../localDate.js';
+import { centsToYuan, yuanToCents } from '../money.js';
+
 export const TAGS = ['衣', '食', '住', '行'] as const;
 export const SLOTS = ['早餐', '午餐', '晚餐', '加餐'] as const;
 export const SCENES = ['回家', '离家', '睡眠', '影院'] as const;
@@ -11,12 +14,12 @@ export type Action =
   | { type: 'add_expense'; id?: string; tag: string; amount: number; date: string; merchant: string; note: string }
   | { type: 'handle_alert'; id: string };
 
-export const CROSS_ACTIONS: Action[] = [
+export const crossActions = (): Action[] => [
   { type: 'adopt_outfit', itemIds: ['w1', 'w2', 'w3'] },
   { type: 'add_meal', id: 'm-cross', slot: '午餐', name: '鸡胸温蔬藜麦', time: '12:40', kcal: 550, protein: 45, carb: 48, fat: 14 },
   { type: 'apply_scene', name: '离家' },
   { type: 'append_packing', tripId: 't-bj', items: ['防风风衣', '保暖内胆'] },
-  { type: 'add_expense', id: 'e-cross', tag: '行', amount: 2400, date: '2026-09-22', merchant: '差旅专账', note: '技术交流会' },
+  { type: 'add_expense', id: 'e-cross', tag: '行', amount: 2400, date: localDate(), merchant: '差旅专账', note: '技术交流会' },
   { type: 'handle_alert', id: 'a-filter' },
 ];
 
@@ -48,13 +51,15 @@ export function parseActions(value: unknown): Action[] {
         tripId: row.tripId,
         items: row.items.filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
       });
-    } else if (row.type === 'add_expense' && TAGS.includes(row.tag as (typeof TAGS)[number]) && Number(row.amount) > 0) {
+    } else if (row.type === 'add_expense' && TAGS.includes(row.tag as (typeof TAGS)[number])) {
+      const cents = yuanToCents(row.amount);
+      if (!cents || (row.date != null && !isLocalDate(row.date))) continue;
       actions.push({
         type: 'add_expense',
         id: typeof row.id === 'string' ? row.id : undefined,
         tag: String(row.tag),
-        amount: Math.round(Number(row.amount)),
-        date: typeof row.date === 'string' ? row.date : '2026-09-22',
+        amount: centsToYuan(cents),
+        date: row.date ?? localDate(),
         merchant: typeof row.merchant === 'string' ? row.merchant : '手动记账',
         note: typeof row.note === 'string' ? row.note : '',
       });

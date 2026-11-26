@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { colorHex, itemNames } from '../format';
+import { modelDestination } from '../../../shared/modelEndpoint';
 import { useStore } from '../store';
 import { CATEGORIES, type ClothingDraft, type WardrobeCategory, type WardrobeItem } from '../types';
 import { blankDraft, similarItems } from '../wardrobePlan';
@@ -49,7 +50,7 @@ export function WardrobePage() {
 
   function photoButton(testId?: string) {
     return (
-      <button type="button" className="btn-ghost" data-testid={testId} disabled={reading} onClick={() => photoRef.current?.click()}>
+      <button type="button" className="btn-ghost" data-testid={testId} aria-describedby="photo-destination" disabled={reading} onClick={() => photoRef.current?.click()}>
         {reading ? '识别中…' : '拍照录入'}
       </button>
     );
@@ -65,6 +66,7 @@ export function WardrobePage() {
           <button type="button" className="btn" data-testid="add-item" onClick={() => setEditor('new')}>添加单品</button>
         </div>
       </header>
+      <p id="photo-destination" className="muted">选取后立即处理衣物照片。处理位置：{modelDestination(store.model.baseUrl)}。</p>
       <input ref={photoRef} hidden type="file" accept="image/*" multiple onChange={(event) => { void onPhotos(event.target.files); }} />
       <div className="layout-2">
         <section>
@@ -102,7 +104,7 @@ export function WardrobePage() {
                     <button type="button" className="btn-ghost small" onClick={() => setEditor(item)}>编辑</button>
                     {pendingDelete === item.id ? (
                       <>
-                        <button type="button" className="btn small danger" onClick={() => { store.removeItem(item.id); setPendingDelete(null); }}>确认</button>
+                        <button type="button" className="btn small danger" onClick={async () => { if (await store.removeItem(item.id)) setPendingDelete(null); }}>确认</button>
                         <button type="button" className="btn-text small" onClick={() => setPendingDelete(null)}>取消</button>
                       </>
                     ) : (
@@ -175,11 +177,11 @@ function ItemModal({ initial, onClose }: { initial: WardrobeItem | ClothingDraft
   const [draft, setDraft] = useState<Draft>(editing ?? (initial === 'new' ? EMPTY : initial));
   const similar = similarItems(store.items, draft, editing?.id);
 
-  function save() {
+  async function save() {
     if (!draft.name.trim() || !draft.color.trim()) return;
-    if (editing) store.updateItem({ ...editing, ...draft, name: draft.name.trim(), color: draft.color.trim() });
-    else store.addItem({ ...draft, name: draft.name.trim(), color: draft.color.trim() });
-    onClose();
+    const item = { ...draft, name: draft.name.trim(), color: draft.color.trim() };
+    const saved = editing ? await store.updateItem({ ...editing, ...item }) : await store.addItem(item);
+    if (saved) onClose();
   }
 
   return (
@@ -240,7 +242,7 @@ function BatchModal({ initial, manual, onClose }: { initial: ClothingDraft[]; ma
       })}
       <div className="modal-actions">
         <button type="button" className="btn-ghost" onClick={onClose}>取消</button>
-        <button type="button" className="btn" disabled={!ready} onClick={() => { store.addItems(rows.map((row) => ({ ...row, name: row.name.trim(), color: row.color.trim() }))); onClose(); }}>确认入库</button>
+        <button type="button" className="btn" disabled={!ready || store.saving} onClick={async () => { if (await store.addItems(rows.map((row) => ({ ...row, name: row.name.trim(), color: row.color.trim() })))) onClose(); }}>确认入库</button>
       </div>
     </Modal>
   );

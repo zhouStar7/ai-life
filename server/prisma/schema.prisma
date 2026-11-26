@@ -22,6 +22,9 @@ model SessionState {
   suggestionIndex Int     @default(0)
   weatherOn       Boolean @default(true)
   weatherLabel    String  @default("22°C 多云")
+  weatherCity     String  @default("")
+  weatherSource   String  @default("")
+  weatherUpdatedAt String @default("")
   outfitAdopted   Boolean @default(false)
   activeOutfitId  String?
   activeScene     String?
@@ -54,7 +57,7 @@ model Meal {
   slot    String
   name    String
   time    String
-  date    String @default("2026-09-22")
+  date    String
   kcal    Int
   protein Int
   carb    Int
@@ -115,11 +118,21 @@ model Trip {
 model Expense {
   id       String @id
   tag      String
-  amount   Int
+  amountCents BigInt
   date     String
   merchant String
   note     String
   tripId   String @default("")
+  billImport BillImport?
+}
+
+model BillImport {
+  expenseId String @id
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  source    String
+  rowKey    String? @unique
+  platformKey String? @unique
+  transactionId String?
 }
 
 model PackingTemplate {
@@ -129,12 +142,12 @@ model PackingTemplate {
 }
 
 model Budget {
-  id    String @id
-  total Int
-  cloth Int
-  food  Int
-  home  Int
-  trip  Int
+  id         String @id
+  totalCents BigInt
+  clothCents BigInt
+  foodCents  BigInt
+  homeCents  BigInt
+  tripCents  BigInt
 }
 
 model Notice {
@@ -142,4 +155,13 @@ model Notice {
   outfit Boolean
   budget Boolean
   device Boolean
+}
+
+model QuickMealDraft {
+  id         String   @id @default(uuid())
+  requestId  String   @unique
+  text       String
+  date       String
+  status     String   @default("pending")
+  receivedAt DateTime @default(now())
 }

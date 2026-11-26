@@ -93,14 +93,18 @@ export interface ItineraryDraft {
   timeline: TripNode[];
   packing: string[];
   source?: 'rules' | 'model';
+  importId?: string;
+  existingTrip?: { id: string; title: string } | null;
 }
 
 export interface TripChain {
+  packing: string[];
+  confirmation: string;
   trip: { id: string; title: string };
   outfit: { title: string; reason: string; itemIds: string[] };
   scene: { name: string; via: 'local' | 'home-assistant' };
   meal: { name: string; slot: string; reason: string };
-  budget: { spent: number; budget: number; remain: number; trip: number };
+  budget: { month: string; spent: number; budget: number; remain: number; trip: number };
 }
 
 export interface PackingTemplate {
@@ -167,7 +171,10 @@ export interface Expense {
   tripId?: string;
 }
 
-export interface BillDraft {
+export type { BillImportReceipt } from '../../shared/bills';
+import type { BillIdentity } from '../../shared/bills';
+
+export interface BillDraft extends BillIdentity {
   tag: SpendTag | null;
   amount: number;
   date: string;

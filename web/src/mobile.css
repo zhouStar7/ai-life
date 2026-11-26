@@ -1,0 +1,30 @@
+.offline-page { max-width: 44rem; margin: auto; padding: 1.25rem; }
+.packing-cache { display: grid; gap: .75rem; overflow-wrap: anywhere; }
+.packing-cache h1 { font-size: 1.75rem; }
+.packing-cache ul { list-style: none; padding: 0; margin: 0; }
+.packing-cache li { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; padding: .75rem 0; border-bottom: 1px solid var(--border-subtle); }
+.packing-cache small { white-space: nowrap; color: var(--text-sub); }
+
+@media (max-width: 600px) {
+  .app { height: 100dvh; }
+  .side { overflow-y: auto; }
+  .top { gap: 8px; }
+  .omni { min-width: 0; }
+  .omni input { padding-right: 8px; }
+  .omni kbd { display: none; }
+  .quick span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .nav-toggle, .quick { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  .viewport { padding-top: 16px; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .viewport :is(.btn,.btn-ghost,.btn-text,.trip,.check,.select), .packing-cache button, .modal button { min-height: 44px; }
+  .viewport :is(.grid-2,.layout-2,.matrix,.grid-4) { grid-template-columns: minmax(0, 1fr); }
+  .viewport :is(.stack,.card,.meal > div,.recipe > div,.field), .modal { min-width: 0; overflow-wrap: anywhere; }
+  .viewport :is(input,select,textarea), .modal :is(input,select,textarea) { max-width: 100%; font-size: 16px; }
+  .meal { display: grid; grid-template-columns: auto 1fr auto auto; gap: 4px; }
+  .meal > div { grid-column: 2 / -1; }
+  .meal > button:first-of-type { grid-column: 3; }
+  .check { align-items: center; }
+  .week { gap: 4px; }
+  .modal-backdrop { padding: 12px; }
+  .modal { max-height: 88dvh; }
+  .modal-actions, .banner { flex-wrap: wrap; }
+}

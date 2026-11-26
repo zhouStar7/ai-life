@@ -63,12 +63,13 @@ test('outfit plan uses the closet, prefers rarely worn pieces, and rotates', () 
   assert.equal(planOutfit([], 0, true, '22°C 多云').itemIds.length, 0);
 });
 
-test('duplicate check uses name or the same color and style', () => {
-  const hits = similarItems(SEED_ITEMS, { name: '牛津衬衫', color: '黑色', occasion: '运动' });
+test('duplicate check uses category, name and normalized color', () => {
+  const hits = similarItems(SEED_ITEMS, { name: '牛津衬衫', color: '黑色', category: '上衣' });
   assert.deepEqual(hits.map((item) => item.id), ['w1']);
-  const styled = similarItems(SEED_ITEMS, { name: '新乐福', color: '黑色', occasion: '通勤' });
+  const styled = similarItems(SEED_ITEMS, { name: '新乐福', color: '黑', category: '鞋包' });
+  assert.equal(similarItems(SEED_ITEMS, { name: '黑裤', color: '黑', category: '裤装' }).length, 0);
   assert.deepEqual(styled.map((item) => item.id), ['w5']);
-  const different = similarItems(SEED_ITEMS, { name: '亚麻衬衫', color: '白色', occasion: '运动' }, 'w1');
+  const different = similarItems(SEED_ITEMS, { name: '亚麻衬衫', color: '白色', category: '上衣' }, 'w1');
   assert.equal(different.some((item) => item.id === 'w1'), false);
 });
 
@@ -105,4 +106,16 @@ test('suggestion and order drafts stay on the closet without a model', async () 
   assert.equal(manual.body.manual, true);
   assert.equal(manual.body.drafts[0].name, '');
   assert.equal(JSON.stringify(manual.body).includes('eyJ'), false);
+});
+
+test('similarity hints allow all ten synthetic garments to be saved and read back', async () => {
+  const items = Array.from({ length: 10 }, (_, index) => ({
+    name: `试穿外套 ${index + 1}`, category: '外套', color: '米色', occasion: '通勤', season: '春秋',
+  }));
+  assert.ok(similarItems(SEED_ITEMS, items[0]).length > 0);
+  const saved = await json('/api/items/batch', { method: 'POST', body: JSON.stringify({ items }) });
+  assert.equal(saved.status, 200);
+  const { body } = await json('/api/snapshot');
+  const garments = body.items.filter((item: { name: string }) => item.name.startsWith('试穿外套 '));
+  assert.deepEqual(garments.map((item: { name: string }) => item.name).sort(), items.map(item => item.name).sort());
 });

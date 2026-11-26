@@ -46,19 +46,17 @@ export function planOutfit(items: ClosetItem[], index: number, weatherOn: boolea
   };
 }
 
-export function similarItems<T extends { id: string; name: string; color: string; occasion: string }>(
-  items: T[],
-  draft: { name: string; color: string; occasion: string },
-  excludeId?: string,
+export function similarItems<T extends { id: string; name: string; category: string; color: string }>(
+  items: T[], draft: { name: string; category: string; color: string }, excludeId?: string,
 ) {
-  const name = draft.name.trim();
-  const color = draft.color.trim();
-  const style = draft.occasion.trim();
-  return items.filter((item) => {
-    if (excludeId && item.id === excludeId) return false;
-    const closeName = name.length >= 2 && (item.name.includes(name) || name.includes(item.name));
-    const sameColorStyle = Boolean(color && style && item.color === color && item.occasion === style);
-    return closeName || sameColorStyle;
+  const normalize = (text: string) => text.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  const name = normalize(draft.name);
+  const color = normalize(draft.color).replace(/色$/, '');
+  return items.filter(item => {
+    if (item.id === excludeId || item.category !== draft.category) return false;
+    const other = normalize(item.name);
+    const closeName = name.length >= 2 && other.length >= 2 && (other.includes(name) || name.includes(other));
+    return closeName || Boolean(color && normalize(item.color).replace(/色$/, '') === color);
   });
 }
 

@@ -80,6 +80,19 @@ const MAIL = `航班 MU5101
 离店：9月30日
 `;
 
+async function confirmed(path: string) {
+  const count = calls.length;
+  const { body } = await json(path, { method: 'POST' });
+  assert.ok(body.preview.token);
+  assert.equal(calls.length, count);
+  const init = { method: 'POST', body: JSON.stringify({ confirmation: body.preview.token }) };
+  const response = await json(path, init);
+  const after = calls.length;
+  assert.equal((await json(path, init)).status, 409);
+  assert.equal(calls.length, after);
+  return response;
+}
+
 test('states map onto light climate player and cover, and only named scenes', () => {
   const devices = mapDevices([
     { entity_id: 'light.living', state: 'on', attributes: { friendly_name: '客厅主灯', brightness: 255 } },
@@ -118,7 +131,7 @@ test('parsed trip can be saved', async () => {
   assert.ok(trip.packing.some((item: { text: string }) => item.text === '登机证件'));
 });
 
-test('chain updates outfit, local away scene and travel budget without calling the house', async () => {
+test('chain previews outfit, local away scene and travel budget without calling the house', async () => {
   const before = await json('/api/snapshot');
   const wears = before.body.items.find((item: { id: string }) => item.id === 'w1').wears;
   const original = globalThis.fetch;
@@ -134,9 +147,9 @@ test('chain updates outfit, local away scene and travel budget without calling t
     assert.equal(chained.body.chain.scene.via, 'local');
     assert.equal(chained.body.chain.budget.spent, before.body.spending.byTag.行);
     assert.equal(chained.body.chain.budget.remain, before.body.budgets.行 - before.body.spending.byTag.行);
-    assert.equal(chained.body.snapshot.activeScene, '离家');
-    assert.equal(chained.body.snapshot.items.find((item: { id: string }) => item.id === 'w1').wears, wears + 1);
-    assert.equal(chained.body.snapshot.devices.find((item: { id: string }) => item.id === 'd1').on, false);
+    assert.equal(chained.body.snapshot.activeScene, before.body.activeScene);
+    assert.equal(chained.body.snapshot.items.find((item: { id: string }) => item.id === 'w1').wears, wears);
+    assert.deepEqual(chained.body.snapshot.devices, before.body.devices);
     assert.equal(chained.body.snapshot.home.connected, false);
     assert.equal(chained.body.snapshot.home.token, undefined);
   } finally {
@@ -168,18 +181,18 @@ test('a reachable assistant replaces cards and a missing scene is not called', a
   assert.equal(calls.some((call) => call.url === '/api/states' && call.auth === 'Bearer test-token'), true);
 
   calls.length = 0;
-  const toggled = await json('/api/devices/light.living/toggle', { method: 'POST' });
+  const toggled = await confirmed('/api/devices/light.living/toggle');
   assert.equal(toggled.body.snapshot.devices.find((item: { id: string }) => item.id === 'light.living').on, false);
   assert.equal(calls.some((call) => call.url === '/api/services/light/turn_off'), true);
 
   calls.length = 0;
-  const away = await json('/api/scenes/离家', { method: 'POST' });
+  const away = await confirmed('/api/scenes/离家');
   assert.equal(away.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url === '/api/services/scene/turn_on' && call.body.includes('scene.away')), true);
   assert.equal(calls.some((call) => call.url.startsWith('/api/services/') && !call.url.includes('/scene/')), false);
 
   calls.length = 0;
-  const cinema = await json('/api/scenes/影院', { method: 'POST' });
+  const cinema = await confirmed('/api/scenes/影院');
   assert.equal(cinema.body.scene.via, 'home-assistant');
   assert.equal(calls.some((call) => call.url.includes('/api/services/scene/')), false);
   assert.equal(calls.some((call) => call.url === '/api/services/light/turn_on' && call.body.includes('brightness_pct')), true);
@@ -187,11 +200,11 @@ test('a reachable assistant replaces cards and a missing scene is not called', a
   assert.equal(calls.some((call) => call.url === '/api/services/media_player/turn_on'), true);
 });
 
-test('an unreachable assistant is marked disconnected and demo devices remain', async () => {
+test('an unreachable assistant is marked disconnected and demo devices stay hidden', async () => {
   await json('/api/home', { method: 'PUT', body: JSON.stringify({ baseUrl: 'http://127.0.0.1:9', token: 'another-token' }) });
   const synced = await json('/api/home/sync', { method: 'POST' });
-  assert.equal(synced.body.error, 'home_unavailable');
+  assert.match(synced.body.error, /无法连接 Home Assistant/);
   assert.equal(synced.body.snapshot.home.connected, false);
-  assert.ok(synced.body.snapshot.devices.some((item: { id: string }) => item.id === 'd1'));
+  assert.equal(synced.body.snapshot.devices.some((item: { id: string }) => item.id === 'd1'), false);
   assert.equal(JSON.stringify(synced.body).includes('another-token'), false);
 });

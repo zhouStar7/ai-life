@@ -1,0 +1,11 @@
+{
+  "name": "ai-life-workbench",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix web ci && npm --prefix server ci",
+    "dev": "node scripts/dev.mjs personal",
+    "dev:demo": "node scripts/dev.mjs demo",
+    "db:backup": "node scripts/database.mjs backup",
+    "db:restore": "node scripts/database.mjs restore"
+  }
+}

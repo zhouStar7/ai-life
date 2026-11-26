@@ -1,6 +1,9 @@
+import { SCENES, type SceneName } from '../types';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { DIET_TODAY, pickRecipe } from '../dietPlan';
+import { useLocalDate } from '../localDate';
+import { pickRecipe } from '../dietPlan';
+import { modelDestination } from '../../../shared/modelEndpoint';
 import { useStore } from '../store';
 import { DietPage } from '../pages/Diet';
 import { HomePage } from '../pages/Home';
@@ -10,8 +13,8 @@ import { SpendingPage } from '../pages/Spending';
 import { TravelPage } from '../pages/Travel';
 import { WardrobePage } from '../pages/Wardrobe';
 import { Icon } from './Icon';
-import { arrange } from '../api/client';
-import { Modal } from './ui';
+import { arrange, errorDetail } from '../api/client';
+import { Modal, SaveStatus } from './ui';
 
 const NAV = [
   { to: '/', label: '今日概览', icon: 'overview' as const, page: 'overview' },
@@ -131,6 +134,7 @@ export function Shell() {
           </div>
         </header>
         <div className="viewport">
+          <SaveStatus />
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/wardrobe" element={<WardrobePage />} />
@@ -154,8 +158,10 @@ export function Shell() {
 function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void; onOpen: (href: string) => void }) {
   const store = useStore();
   const [text, setText] = useState(seed);
+  const [planError, setPlanError] = useState('');
   const [plan, setPlan] = useState<{ title: string; lines: string[]; href: string; label: string; actions?: unknown[]; key?: string } | null>(null);
-  const todayMeals = store.meals.filter((meal) => (meal.date || DIET_TODAY) === DIET_TODAY);
+  const today = useLocalDate();
+  const todayMeals = store.meals.filter((meal) => meal.date === today);
   const proteinGap = Math.max(0, store.targets.protein - todayMeals.reduce((sum, meal) => sum + meal.protein, 0));
   const kcalGap = Math.max(0, store.targets.kcal - todayMeals.reduce((sum, meal) => sum + meal.kcal, 0));
   const mealPick = pickRecipe(store.recipes, todayMeals, store.targets);
@@ -163,7 +169,9 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
   async function submit(raw: string) {
     const value = raw.trim();
     if (!value) return;
-    setText(value);
+    setText(raw);
+    setPlan(null);
+    setPlanError('');
     try {
       const result = await arrange(value);
       setPlan({
@@ -175,8 +183,9 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
         label: result.adopted ? '已采纳' : result.actions.length > 0 ? '采纳' : '打开',
       });
       return;
-    } catch {
-      localPlan(value);
+    } catch (error) {
+      if (store.demoMode) localPlan(value);
+      else setPlanError(`无法生成安排：${errorDetail(error)}。可以修改内容或重试。`);
     }
   }
 
@@ -228,14 +237,9 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
     });
   }
 
-  useEffect(() => {
-    if (seed) submit(seed);
-    // 弹层打开时按顶栏已经写下的话生成一次安排。
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <Modal title="今天想安排什么？" onClose={onClose}>
+      <p className="muted">生成安排或选择示例时，会处理输入文字及衣食住行支摘要。处理位置：{modelDestination(store.model.baseUrl)}。</p>
       <form onSubmit={(event) => { event.preventDefault(); submit(text); }}>
         <textarea rows={3} autoFocus placeholder="比如：出差前帮我准备一下" value={text} onChange={(event) => setText(event.target.value)} />
         <div className="pills" style={{ marginTop: 10 }}>
@@ -247,6 +251,7 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
           <button type="submit" className="btn">生成安排</button>
         </div>
       </form>
+      {planError && <p className="note" role="alert">{planError}</p>}
       {plan ? (
         <div className="plan">
           <strong>{plan.title}</strong>
@@ -255,11 +260,14 @@ function AiModal({ seed, onClose, onOpen }: { seed: string; onClose: () => void;
             type="button"
             className="btn"
             style={{ marginTop: 10 }}
-            disabled={plan.label === '已采纳'}
-            onClick={() => {
-              if (plan.actions && plan.actions.length > 0 && plan.label === '采纳') store.adoptActions(plan.actions, plan.key);
-              else if (plan.label === '一键采纳') store.executeCrossPlan();
+            disabled={store.saving || plan.label === '已采纳'}
+            onClick={async () => {
+              if (plan.actions && plan.actions.length > 0 && plan.label === '采纳') {
+                if (!await store.adoptActions(plan.actions, plan.key)) return;
+              } else if (plan.label === '一键采纳' && !await store.executeCrossPlan()) return;
+              const scene = plan.actions?.find((action): action is { type: 'apply_scene'; name: SceneName } => !!action && typeof action === 'object' && 'type' in action && action.type === 'apply_scene' && 'name' in action && SCENES.includes(action.name as SceneName));
               onOpen(plan.href);
+              if (scene || plan.label === '一键采纳') await store.applyScene(scene?.name ?? '离家');
             }}
           >{plan.label}</button>
         </div>

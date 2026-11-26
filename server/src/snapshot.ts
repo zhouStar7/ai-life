@@ -2,9 +2,11 @@ import type { PrismaClient } from '@prisma/client';
 import { DEFAULT_HA_BASE } from './adapters/home-assistant.js';
 import { readSceneBook } from './homeLink.js';
 import { readJson } from './ids.js';
-import { PAST_TREND } from './seedData.js';
+import { defaultSpendingMonth, spendingSummary } from '../../shared/spending.js';
+import { localDate } from './localDate.js';
+import { centsToYuan, expenseToYuan } from './money.js';
 
-export async function readSnapshot(db: PrismaClient) {
+export async function readSnapshot(db: PrismaClient, selectedMonth = defaultSpendingMonth(localDate(), process.env.AI_LIFE_MODE === 'demo')) {
   const [items, outfits, meals, recipes, target, devices, alerts, trips, expenses, budget, notice, session, profile, packingTemplates] = await Promise.all([
     db.wardrobeItem.findMany({ orderBy: { createdAt: 'desc' } }),
     db.outfit.findMany(),
@@ -23,13 +25,9 @@ export async function readSnapshot(db: PrismaClient) {
   ]);
 
   const liveHome = session.haConnected && Boolean(profile.haToken);
-  const visibleDevices = liveHome && devices.some((device) => device.source === 'ha')
+  const visibleDevices = Boolean(profile.haToken)
     ? devices.filter((device) => device.source === 'ha')
     : devices.filter((device) => device.source !== 'ha');
-
-  const month = expenses.filter((item) => item.date.startsWith('2026-09'));
-  const total = month.reduce((sum, item) => sum + item.amount, 0);
-  const byTag = (tag: string) => month.filter((item) => item.tag === tag).reduce((sum, item) => sum + item.amount, 0);
 
   return {
     items,
@@ -52,19 +50,22 @@ export async function readSnapshot(db: PrismaClient) {
       ...trip,
       tickets: readJson(trip.tickets, []),
       timeline: readJson(trip.timeline, []),
-      packing: readJson(trip.packing, []),
+      packing: readJson<{ id: string; text: string; done: boolean }[]>(trip.packing, []),
     })),
-    expenses,
+    expenses: expenses.map(expenseToYuan),
     packingTemplates: packingTemplates.map((template) => ({
       id: template.id,
       name: template.name,
       items: readJson<string[]>(template.items, []),
     })),
-    budgets: { total: budget.total, 衣: budget.cloth, 食: budget.food, 住: budget.home, 行: budget.trip },
+    budgets: { total: centsToYuan(budget.totalCents), 衣: centsToYuan(budget.clothCents), 食: centsToYuan(budget.foodCents), 住: centsToYuan(budget.homeCents), 行: centsToYuan(budget.tripCents) },
     notices: { outfit: notice.outfit, budget: notice.budget, device: notice.device },
     suggestionIndex: session.suggestionIndex,
     weatherOn: session.weatherOn,
     weatherLabel: session.weatherLabel,
+    weatherCity: session.weatherCity,
+    weatherSource: session.weatherSource,
+    weatherUpdatedAt: session.weatherUpdatedAt,
     outfitAdopted: session.outfitAdopted,
     activeOutfitId: session.activeOutfitId,
     activeScene: session.activeScene,
@@ -82,11 +83,7 @@ export async function readSnapshot(db: PrismaClient) {
       sceneCatalog: readSceneBook(session.haScenes).catalog,
       sceneBindings: readSceneBook(session.haScenes).bindings,
     },
-    spending: {
-      monthTotal: total,
-      byTag: { 衣: byTag('衣'), 食: byTag('食'), 住: byTag('住'), 行: byTag('行') },
-      trend: [...PAST_TREND, { label: '9月', amount: total }],
-    },
+    spending: spendingSummary(expenses, selectedMonth, (row) => row.amountCents),
   };
 }
 

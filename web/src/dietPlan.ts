@@ -1,4 +1,4 @@
-export const DIET_TODAY = '2026-09-22';
+import { isLocalDate, localDate } from './localDate';
 
 export type MealSlotName = '早餐' | '午餐' | '晚餐' | '加餐';
 
@@ -18,7 +18,7 @@ type Nutrition = { kcal: number; protein: number; carb: number; fat: number };
 
 type Food = Nutrition & { name: string; keys: string[] };
 
-type RecipeLike = Nutrition & { id?: string; name: string; slot?: string; tags?: string[] };
+type RecipeLike = Nutrition & { id?: string; name: string; slot?: string };
 
 type MealLike = Nutrition & { date?: string | null };
 
@@ -145,7 +145,7 @@ export function estimateMeal(text: string, recipes: RecipeLike[] = []): MealDraf
     return {
       ...when,
       name: raw || '未命名',
-      date: DIET_TODAY,
+      date: localDate(),
       kcal: 450,
       protein: 18,
       carb: 50,
@@ -157,7 +157,7 @@ export function estimateMeal(text: string, recipes: RecipeLike[] = []): MealDraf
   return {
     ...when,
     name: raw,
-    date: DIET_TODAY,
+    date: localDate(),
     kcal: round(hits.reduce((sum, hit) => sum + hit.kcal, 0)),
     protein: round(hits.reduce((sum, hit) => sum + hit.protein, 0)),
     carb: round(hits.reduce((sum, hit) => sum + hit.carb, 0)),
@@ -199,25 +199,49 @@ export function pickRecipe<T extends RecipeLike>(recipes: T[], meals: MealLike[]
   return best;
 }
 
-export function weekFromMeals(meals: MealLike[]) {
-  const [year, month, day] = DIET_TODAY.split('-').map(Number);
-  const end = new Date(year, month - 1, day);
+export function weekFromMeals(meals: MealLike[], endDate = localDate()) {
+  const end = new Date(`${endDate}T12:00:00`);
   const days: { date: string; label: string; kcal: number }[] = [];
   for (let offset = 6; offset >= 0; offset -= 1) {
     const current = new Date(end);
     current.setDate(end.getDate() - offset);
-    const date = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-    const kcal = meals.reduce((sum, meal) => sum + ((meal.date || DIET_TODAY) === date ? meal.kcal : 0), 0);
+    const date = localDate(current);
+    const kcal = meals.reduce((sum, meal) => sum + (meal.date === date ? meal.kcal : 0), 0);
     days.push({ date, label: String(current.getDate()), kcal });
   }
   return days;
 }
 
 export function mealDate(value: unknown) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : DIET_TODAY;
+  return isLocalDate(value) ? value : localDate();
 }
 
 export function recipeTags(value: unknown) {
   const source = Array.isArray(value) ? value.map((tag) => String(tag)) : String(value ?? '').split(/[,，、\s]+/);
   return source.map((tag) => tag.trim()).filter(Boolean);
+}
+
+
+export function commonMeals<T extends { name: string; date?: string; time: string }>(meals: T[], limit = 6): T[] {
+  const byName = new Map<string, { count: number; meal: T }>();
+  const recent = (meal: T) => `${meal.date ?? ''} ${meal.time}`;
+  for (const meal of meals) {
+    const key = meal.name.trim().toLowerCase();
+    if (!key) continue;
+    const entry = byName.get(key);
+    if (!entry) byName.set(key, { count: 1, meal });
+    else {
+      entry.count++;
+      if (recent(meal) >= recent(entry.meal)) entry.meal = meal;
+    }
+  }
+  return [...byName.values()].sort((a, b) => b.count - a.count || recent(b.meal).localeCompare(recent(a.meal)))
+    .slice(0, limit).map(entry => entry.meal);
+}
+
+export function portionNutrition(meal: Nutrition, portions: number): Nutrition {
+  return {
+    kcal: Math.round(meal.kcal * portions), protein: Math.round(meal.protein * portions),
+    carb: Math.round(meal.carb * portions), fat: Math.round(meal.fat * portions),
+  };
 }

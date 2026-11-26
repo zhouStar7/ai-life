@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import {
-  callService,
+  homeError,
   DEFAULT_HA_BASE,
   deriveAlerts,
   fetchAreas,
@@ -8,10 +8,8 @@ import {
   listSceneCatalog,
   mapDevices,
   mapScenes,
-  serviceFor,
 } from './adapters/home-assistant.js';
 import { readJson } from './ids.js';
-import { nextDevice, serviceCalls } from './scenes.js';
 
 const SCENE_NAMES = ['回家', '离家', '睡眠', '影院'] as const;
 const EXAMPLE_ALERTS = ['a-filter', 'a-offline', 'a-battery'];
@@ -76,9 +74,9 @@ export async function syncHome(db: PrismaClient) {
       data: { haConnected: true, haScenes: writeSceneBook(book) },
     });
     return null;
-  } catch {
+  } catch (error) {
     await db.sessionState.update({ where: { id: 'local' }, data: { haConnected: false } });
-    return 'home_unavailable' as const;
+    return homeError(error);
   }
 }
 
@@ -92,55 +90,6 @@ export async function bindScene(db: PrismaClient, name: string, target: string) 
   return null;
 }
 
-export async function applyNamedScene(db: PrismaClient, name: string) {
-  const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-  const profile = await db.profile.findUniqueOrThrow({ where: { id: 'local' } });
-  const book = readSceneBook(session.haScenes);
-  const binding = book.bindings[name as (typeof SCENE_NAMES)[number]];
-  let via: 'local' | 'home-assistant' = 'local';
-  if (session.haConnected && profile.haToken && binding?.startsWith('scene.')) {
-    try {
-      await callService(profile.haBase || DEFAULT_HA_BASE, profile.haToken, 'scene', 'turn_on', binding);
-      via = 'home-assistant';
-    } catch {
-      await db.sessionState.update({ where: { id: 'local' }, data: { haConnected: false } });
-    }
-  } else if (session.haConnected && profile.haToken) {
-    const acted = await applyDeviceActions(db, profile.haBase || DEFAULT_HA_BASE, profile.haToken, name);
-    if (acted) via = 'home-assistant';
-  }
-  if (via === 'local') {
-    const devices = await db.device.findMany({ where: { source: 'demo' } });
-    for (const device of devices) {
-      const next = nextDevice(device, name);
-      await db.device.update({ where: { id: device.id }, data: { on: next.on, paramValue: next.paramValue } });
-    }
-  }
-  await db.sessionState.update({ where: { id: 'local' }, data: { activeScene: name } });
-  return { name, via };
-}
-
-export async function toggleDevice(db: PrismaClient, id: string) {
-  const device = await db.device.findUnique({ where: { id } });
-  if (!device || device.offline) return null;
-  if (device.source !== 'ha') {
-    await db.device.update({ where: { id: device.id }, data: { on: !device.on } });
-    return null;
-  }
-  const profile = await db.profile.findUniqueOrThrow({ where: { id: 'local' } });
-  const session = await db.sessionState.findUniqueOrThrow({ where: { id: 'local' } });
-  if (!session.haConnected || !profile.haToken) return 'home_unavailable' as const;
-  const domain = device.id.split('.')[0];
-  try {
-    await callService(profile.haBase || DEFAULT_HA_BASE, profile.haToken, domain, serviceFor(domain, !device.on), device.id);
-    await db.device.update({ where: { id: device.id }, data: { on: !device.on } });
-    return null;
-  } catch {
-    await db.sessionState.update({ where: { id: 'local' }, data: { haConnected: false } });
-    return 'home_unavailable' as const;
-  }
-}
-
 function mergeBook(previous: SceneBook, auto: Record<string, string>, catalog: SceneCatalogItem[]): SceneBook {
   const bindings = { ...previous.bindings };
   const ids = new Set(catalog.map((item) => item.id));
@@ -152,32 +101,4 @@ function mergeBook(previous: SceneBook, auto: Record<string, string>, catalog: S
     else delete bindings[name];
   }
   return { bindings, catalog };
-}
-
-async function applyDeviceActions(db: PrismaClient, base: string, token: string, name: string) {
-  const devices = await db.device.findMany({ where: { source: 'ha' } });
-  let failed = 0;
-  let tried = 0;
-  for (const device of devices) {
-    const next = nextDevice(device, name);
-    const calls = serviceCalls(device, next);
-    let deviceFailed = false;
-    for (const call of calls) {
-      tried += 1;
-      try {
-        await callService(base, token, call.domain, call.service, device.id, call.data);
-      } catch {
-        failed += 1;
-        deviceFailed = true;
-      }
-    }
-    if (!deviceFailed && (next.on !== device.on || next.paramValue !== device.paramValue)) {
-      await db.device.update({ where: { id: device.id }, data: { on: next.on, paramValue: next.paramValue } });
-    }
-  }
-  if (tried > 0 && failed === tried) {
-    await db.sessionState.update({ where: { id: 'local' }, data: { haConnected: false } });
-    return false;
-  }
-  return true;
 }
